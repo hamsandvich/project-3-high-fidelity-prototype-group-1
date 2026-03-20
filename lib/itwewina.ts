@@ -33,9 +33,9 @@ const ITWEWINA_LABEL_MODES = [
   }
 ] as const;
 const DETAIL_REQUEST_INTERVAL_MS = 750;
-const SEARCH_REQUEST_INTERVAL_MS = 10_000;
-const SEARCH_RETRY_DELAY_MS = 10_000;
-const MAX_SEARCH_ATTEMPTS = 3;
+const SEARCH_REQUEST_INTERVAL_MS = 3_000;
+const SEARCH_RETRY_DELAYS_MS = [3_000, 5_000, 10_000] as const;
+const MAX_SEARCH_ATTEMPTS = SEARCH_RETRY_DELAYS_MS.length + 1;
 const SEARCH_ERROR_SNIPPET_LENGTH = 180;
 const RETRYABLE_SEARCH_STATUS_CODES = new Set([429, 502, 503, 504]);
 const PARADIGM_SECTION_PATTERN = /<tbody>([\s\S]*?)<\/tbody>/g;
@@ -191,8 +191,10 @@ function formatSearchFailureReason(params: {
     details.push(`attempts: ${params.attempt}`);
   }
 
-  if (params.status === 429) {
-    details.push(`waited ${SEARCH_RETRY_DELAY_MS / 1000}s between retries`);
+  if (params.status === 429 && params.attempt > 1) {
+    details.push(
+      `retry schedule: ${SEARCH_RETRY_DELAYS_MS.map((delayMs) => `${delayMs / 1000}s`).join(", ")}`
+    );
   }
 
   return details.join("; ");
@@ -225,9 +227,10 @@ function isRetryableSearchError(error: ItwewinaSearchError) {
   return error.status ? RETRYABLE_SEARCH_STATUS_CODES.has(error.status) : true;
 }
 
-function getRetryDelayMs(error: ItwewinaSearchError) {
+function getRetryDelayMs(error: ItwewinaSearchError, attempt: number) {
+  const scheduledDelayMs = SEARCH_RETRY_DELAYS_MS[attempt - 1] ?? SEARCH_RETRY_DELAYS_MS.at(-1) ?? 0;
   const retryAfterMs = error.retryAfterSeconds ? error.retryAfterSeconds * 1000 : 0;
-  return Math.max(SEARCH_RETRY_DELAY_MS, retryAfterMs);
+  return Math.max(scheduledDelayMs, retryAfterMs);
 }
 
 function formatSkippedSearchWarning(error: ItwewinaSearchError) {
@@ -236,6 +239,14 @@ function formatSkippedSearchWarning(error: ItwewinaSearchError) {
   }
 
   return `Skipped "${error.query}": ${formatSearchFailureReason(error)}.`;
+}
+
+function formatSkippedSearchTermsWarning(terms: string[]) {
+  if (terms.length === 0) {
+    return "";
+  }
+
+  return `Skipped search term(s): ${terms.map((term) => `"${term}"`).join(", ")}.`;
 }
 
 function buildImportFailureMessage(warnings: string[]) {
@@ -953,7 +964,7 @@ async function fetchItwewinaHtml(
       });
 
       if (attempt < MAX_SEARCH_ATTEMPTS && isRetryableSearchError(error)) {
-        const delayMs = getRetryDelayMs(error);
+        const delayMs = getRetryDelayMs(error, attempt);
         await options.onRetry?.({
           error,
           delayMs,
@@ -975,7 +986,7 @@ async function fetchItwewinaHtml(
             });
 
       if (attempt < MAX_SEARCH_ATTEMPTS && isRetryableSearchError(searchError)) {
-        const delayMs = getRetryDelayMs(searchError);
+        const delayMs = getRetryDelayMs(searchError, attempt);
         await options.onRetry?.({
           error: searchError,
           delayMs,
@@ -1028,6 +1039,7 @@ export async function buildItwewinaImportBatch(
 
   const fetchedEntries: ItwewinaSearchEntry[] = [];
   const warnings: string[] = [];
+  const skippedSearchTerms: string[] = [];
 
   for (const [index, term] of searchTerms.entries()) {
     if (index > 0) {
@@ -1077,6 +1089,7 @@ export async function buildItwewinaImportBatch(
       if (error instanceof ItwewinaSearchError) {
         const warning = formatSkippedSearchWarning(error);
         warnings.push(warning);
+        skippedSearchTerms.push(term);
         await reportProgress(options, {
           stage: "skipped",
           completed: index + 1,
@@ -1089,6 +1102,11 @@ export async function buildItwewinaImportBatch(
 
       throw error;
     }
+  }
+
+  const skippedTermsWarning = formatSkippedSearchTermsWarning(skippedSearchTerms);
+  if (skippedTermsWarning) {
+    warnings.push(skippedTermsWarning);
   }
 
   if (fetchedEntries.length === 0 && warnings.length > 0) {

@@ -3,6 +3,7 @@ import { unstable_noStore as noStore } from "next/cache";
 
 import { HOME_CATEGORY_SLUGS, RELATION_TYPE_VALUES } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
+import { buildWordSearchWhere } from "@/lib/search";
 import { getInverseRelationType, uniqueBy } from "@/lib/utils";
 import { createEmptyWordPayload } from "@/lib/word-service";
 import type { ItwewinaMetadata } from "@/types";
@@ -110,23 +111,7 @@ export async function searchWords(query: string) {
   }
 
   return prisma.word.findMany({
-    where: {
-      OR: [
-        { lemma: { contains: normalized, mode: "insensitive" } },
-        { syllabics: { contains: normalized, mode: "insensitive" } },
-        { plainEnglish: { contains: normalized, mode: "insensitive" } },
-        {
-          meanings: {
-            some: {
-              gloss: {
-                contains: normalized,
-                mode: "insensitive"
-              }
-            }
-          }
-        }
-      ]
-    },
+    where: buildWordSearchWhere(normalized),
     orderBy: [{ lemma: "asc" }],
     select: wordCardSelect,
     take: 50

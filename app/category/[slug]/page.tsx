@@ -1,3 +1,4 @@
+import { ThemeLessonGenerator } from "@/components/category/theme-lesson-generator";
 import { notFound } from "next/navigation";
 
 import { PageFrame } from "@/components/navigation/page-frame";
@@ -27,7 +28,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       backHref="/"
     >
       {category.words.length ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <ThemeLessonGenerator categorySlug={category.slug} categoryName={category.name} />
           {category.words.map((entry) => (
             <WordCard key={entry.word.id} word={entry.word as WordCardModel} />
           ))}

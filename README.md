@@ -37,6 +37,9 @@ Core MVP features:
 - mobile-first browsing and search
 - novice / expert word detail modes
 - local bookmarks via `localStorage`
+- AI-generated flashcards from saved words
+- AI lesson-plan generation by theme with PDF email delivery
+- AI category and relation enrichment after imports
 - local settings for font size, Cree/English emphasis, and syllabics display
 - simple semantic map view
 - admin CRUD for words
@@ -160,6 +163,23 @@ Admin unlock code defaults to the value in `.env`:
 ADMIN_ACCESS_CODE=altlab-demo-admin
 ```
 
+AI and email features also use these environment variables:
+
+```text
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-5-mini
+OPENAI_ENRICHMENT_MODEL=
+OPENAI_LESSON_PLAN_MODEL=
+OPENAI_FLASHCARD_MODEL=
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-university-google-account@example.edu
+SMTP_PASS=your-google-app-password-or-workspace-smtp-password
+SMTP_FROM_EMAIL=your-university-google-account@example.edu
+SMTP_FROM_NAME=Vocabulary Explorer
+```
+
 ## Exact Useful Commands
 
 ```bash
@@ -204,6 +224,15 @@ This will start:
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public
 NEXT_PUBLIC_APP_URL=https://your-app-domain.example
 ADMIN_ACCESS_CODE=choose-a-secret-admin-code
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-5-mini
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-university-google-account@example.edu
+SMTP_PASS=your-google-app-password-or-workspace-smtp-password
+SMTP_FROM_EMAIL=your-university-google-account@example.edu
+SMTP_FROM_NAME=Vocabulary Explorer
 PORT=3000
 ```
 
@@ -237,6 +266,7 @@ The import page supports:
 
 - JSON paste/import
 - CSV upload/paste
+- ITWÊWINA search-term import with follow-up AI enrichment
 
 For CSV:
 
@@ -245,6 +275,20 @@ For CSV:
 - or provide `categorySlugs` as a pipe-separated list such as `body-parts|animals`
 
 An example JSON payload is prefilled on `/admin/import`.
+
+After an import completes, the server can call OpenAI to:
+
+- suggest missing category assignments across the current word catalog
+- add high-confidence semantic relations without deleting existing human-entered links
+
+If `OPENAI_API_KEY` is not configured, imports still succeed and the admin UI shows a warning that AI enrichment was skipped.
+
+## Teacher And Study Features
+
+- Theme pages now include a teacher email form that generates an AI lesson plan, converts it to PDF, and sends it through the configured SMTP account.
+- The saved words page now includes an AI flashcard generator for the learner's bookmarked words.
+
+For university Google accounts, the simplest setup is Google Workspace / Gmail-compatible SMTP using `smtp.gmail.com` with the account email and an app password or whatever SMTP credential method your university allows. If your institution blocks SMTP app passwords, you may need to swap this for your campus relay or a Google OAuth mail flow later.
 
 ## Seed Data Notes
 

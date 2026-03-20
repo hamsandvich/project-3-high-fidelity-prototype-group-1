@@ -3,6 +3,7 @@ import { z } from "zod";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { hasAdminAccessFromRequest, unauthorizedAdminResponse } from "@/lib/admin";
+import { enrichVocabularyCatalogWithAI } from "@/lib/ai";
 import { importWords, parseImportInput } from "@/lib/importers";
 import { buildItwewinaImportBatch } from "@/lib/itwewina";
 
@@ -33,6 +34,18 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await importWords(parsed.words);
+    const warnings = [...parsed.warnings];
+    let ai: Awaited<ReturnType<typeof enrichVocabularyCatalogWithAI>> | undefined;
+
+    try {
+      ai = await enrichVocabularyCatalogWithAI();
+
+      if (ai.warning) {
+        warnings.push(ai.warning);
+      }
+    } catch (error) {
+      warnings.push(`AI enrichment skipped: ${error instanceof Error ? error.message : "Unknown error."}`);
+    }
 
     revalidatePath("/");
     revalidatePath("/search");
@@ -41,8 +54,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ...result,
+      ai,
       queryCount: parsed.queryCount,
-      warnings: parsed.warnings.length > 0 ? parsed.warnings : undefined
+      warnings: warnings.length > 0 ? warnings : undefined
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -29,6 +29,13 @@ type ItwewinaImportResultEvent = {
   type: "result";
   importedCount: number;
   queryCount: number;
+  ai?: {
+    skipped: boolean;
+    processedWords: number;
+    addedCategoryAssignments: number;
+    addedRelations: number;
+    warning?: string;
+  };
   warnings?: string[];
 };
 
@@ -41,6 +48,46 @@ type ItwewinaImportStreamEvent =
   | ItwewinaImportProgressEvent
   | ItwewinaImportResultEvent
   | ItwewinaImportErrorEvent;
+
+type AiImportSummary = {
+  skipped: boolean;
+  processedWords: number;
+  addedCategoryAssignments: number;
+  addedRelations: number;
+  warning?: string;
+};
+
+function buildImportMessage({
+  importedCount,
+  queryCount,
+  warnings,
+  ai
+}: {
+  importedCount: number;
+  queryCount?: number;
+  warnings: string[];
+  ai?: AiImportSummary;
+}) {
+  const baseMessage = queryCount
+    ? `Imported ${importedCount} entries from ${queryCount} itwewina search term(s).`
+    : `Imported ${importedCount} entries.`;
+
+  if (!ai) {
+    return warnings.length > 0 ? `${baseMessage} Completed with ${warnings.length} warning(s).` : baseMessage;
+  }
+
+  if (ai.skipped) {
+    return `${baseMessage} AI enrichment was skipped.`;
+  }
+
+  const aiMessage = `AI enrichment processed ${ai.processedWords} word${
+    ai.processedWords === 1 ? "" : "s"
+  }, adding ${ai.addedCategoryAssignments} category assignment${
+    ai.addedCategoryAssignments === 1 ? "" : "s"
+  } and ${ai.addedRelations} relation${ai.addedRelations === 1 ? "" : "s"}.`;
+
+  return warnings.length > 0 ? `${baseMessage} ${aiMessage} Completed with ${warnings.length} warning(s).` : `${baseMessage} ${aiMessage}`;
+}
 
 function buildProgressPercent(progress: ItwewinaProgressState) {
   if (progress.total <= 0) {
@@ -115,7 +162,13 @@ export function ImportForm() {
     });
 
     const payload = (await response.json().catch(() => null)) as
-      | { importedCount?: number; queryCount?: number; warnings?: string[]; error?: string }
+      | {
+          importedCount?: number;
+          queryCount?: number;
+          ai?: AiImportSummary;
+          warnings?: string[];
+          error?: string;
+        }
       | null;
 
     if (!response.ok) {
@@ -124,15 +177,10 @@ export function ImportForm() {
 
     const importedCount = payload?.importedCount ?? 0;
     const queryCount = payload?.queryCount;
+    const ai = payload?.ai;
     const warnings = payload?.warnings ?? [];
 
-    setMessage(
-      queryCount
-        ? `Imported ${importedCount} entries from ${queryCount} itwewina search term(s).${
-            warnings.length > 0 ? ` Completed with ${warnings.length} warning(s).` : ""
-          }`
-        : `Imported ${importedCount} entries.`
-    );
+    setMessage(buildImportMessage({ importedCount, queryCount, warnings, ai }));
     setWarning(warnings.join("\n"));
     router.refresh();
   }
@@ -180,9 +228,12 @@ export function ImportForm() {
       status: "Import complete."
     });
     setMessage(
-      `Imported ${result.importedCount} entries from ${result.queryCount} itwewina search term(s).${
-        warnings.length > 0 ? ` Completed with ${warnings.length} warning(s).` : ""
-      }`
+      buildImportMessage({
+        importedCount: result.importedCount,
+        queryCount: result.queryCount,
+        warnings,
+        ai: result.ai
+      })
     );
     setWarning(warnings.join("\n"));
     router.refresh();

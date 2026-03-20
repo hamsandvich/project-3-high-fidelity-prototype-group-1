@@ -3,6 +3,7 @@ import { z } from "zod";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { hasAdminAccessFromRequest, unauthorizedAdminResponse } from "@/lib/admin";
+import { enrichVocabularyCatalogWithAI } from "@/lib/ai";
 import { importWords } from "@/lib/importers";
 import { buildItwewinaImportBatch, type ItwewinaImportProgressEvent } from "@/lib/itwewina";
 
@@ -16,6 +17,7 @@ type ItwewinaImportStreamEvent =
       type: "result";
       importedCount: number;
       queryCount: number;
+      ai?: Awaited<ReturnType<typeof enrichVocabularyCatalogWithAI>>;
       warnings?: string[];
     }
   | {
@@ -69,6 +71,26 @@ export async function POST(request: NextRequest) {
           });
 
           const result = await importWords(parsed.words);
+          const warnings = [...parsed.warnings];
+          let ai: Awaited<ReturnType<typeof enrichVocabularyCatalogWithAI>> | undefined;
+
+          send({
+            type: "progress",
+            stage: "complete",
+            completed: parsed.queryCount,
+            total: parsed.queryCount,
+            status: "Imported entries saved. Running AI categorization and relation mapping."
+          });
+
+          try {
+            ai = await enrichVocabularyCatalogWithAI();
+
+            if (ai.warning) {
+              warnings.push(ai.warning);
+            }
+          } catch (error) {
+            warnings.push(`AI enrichment skipped: ${error instanceof Error ? error.message : "Unknown error."}`);
+          }
 
           revalidatePath("/");
           revalidatePath("/search");
@@ -79,7 +101,8 @@ export async function POST(request: NextRequest) {
             type: "result",
             importedCount: result.importedCount,
             queryCount: parsed.queryCount,
-            warnings: parsed.warnings.length > 0 ? parsed.warnings : undefined
+            ai,
+            warnings: warnings.length > 0 ? warnings : undefined
           });
         } catch (error) {
           send({

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Trash2 } from "lucide-react";
 
 import { useAppState } from "@/components/providers/app-providers";
+import { FlashcardGenerator } from "@/components/saved/flashcard-generator";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export function SavedWordsPanel() {
@@ -20,6 +21,7 @@ export function SavedWordsPanel() {
 
   return (
     <div className="space-y-3">
+      <FlashcardGenerator wordIds={savedWords.map((word) => word.id)} />
       {savedWords.map((word) => (
         <div key={word.id} className="surface-card flex items-center justify-between gap-3 p-4">
           <Link href={`/word/${word.slug}`} className="min-w-0 flex-1">

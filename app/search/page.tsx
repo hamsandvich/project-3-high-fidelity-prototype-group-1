@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageFrame } from "@/components/navigation/page-frame";
+import { ItwewinaSearchFallback } from "@/components/search/itwewina-search-fallback";
 import { SearchBar } from "@/components/search/search-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WordCard } from "@/components/ui/word-card";
@@ -33,12 +34,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           />
         ) : results.length === 0 ? (
           <EmptyState
-            title="No matches yet"
-            description="Try another spelling or open a category to browse the seed vocabulary."
+            title="No local matches yet"
+            description="Try another spelling, or let the app check Itwewina and save matching words to the database."
             action={
-              <Link href="/" className="tap-button-primary">
-                Browse categories
-              </Link>
+              <div className="space-y-3">
+                <ItwewinaSearchFallback query={q} />
+                <Link href="/" className="tap-button-primary inline-flex">
+                  Browse categories
+                </Link>
+              </div>
             }
           />
         ) : (
