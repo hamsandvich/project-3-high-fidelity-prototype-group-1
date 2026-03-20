@@ -32,8 +32,6 @@ const ITWEWINA_LABEL_MODES = [
     isPlainEnglish: false
   }
 ] as const;
-const DETAIL_REQUEST_INTERVAL_MS = 750;
-const SEARCH_REQUEST_INTERVAL_MS = 1_000;
 const SEARCH_RETRY_DELAYS_MS = [3_000, 5_000, 10_000] as const;
 const MAX_SEARCH_ATTEMPTS = SEARCH_RETRY_DELAYS_MS.length + 1;
 const SEARCH_ERROR_SNIPPET_LENGTH = 180;
@@ -868,11 +866,7 @@ async function enrichEntryWithWordDetails(entry: ItwewinaSearchEntry) {
   let itwewinaMetadata = entry.itwewinaMetadata;
   let linguisticClass = entry.linguisticClass;
 
-  for (const [modeIndex, mode] of ITWEWINA_LABEL_MODES.entries()) {
-    if (modeIndex > 0) {
-      await sleep(DETAIL_REQUEST_INTERVAL_MS);
-    }
-
+  for (const mode of ITWEWINA_LABEL_MODES) {
     const url = new URL(entry.wordUrl);
     url.searchParams.set("paradigm-size", "full");
 
@@ -937,10 +931,6 @@ async function enrichEntriesWithWordDetails(
       term: entry.lemma,
       status: `Enriching "${entry.lemma}" from its full Itwewina page (${index + 1} of ${entries.length}).`
     });
-
-    if (index > 0) {
-      await sleep(DETAIL_REQUEST_INTERVAL_MS);
-    }
 
     const enriched = await enrichEntryWithWordDetails(entry);
     enrichedEntries.push(enriched.entry);
@@ -1111,18 +1101,6 @@ export async function buildItwewinaImportBatch(
   const skippedSearchTerms: string[] = [];
 
   for (const [index, term] of searchTerms.entries()) {
-    if (index > 0) {
-      await reportProgress(options, {
-        stage: "waiting",
-        completed: index,
-        total: searchTerms.length,
-        term,
-        status: `Waiting ${SEARCH_REQUEST_INTERVAL_MS / 1000}s before searching "${term}".`,
-        unitLabel: "search terms"
-      });
-      await sleep(SEARCH_REQUEST_INTERVAL_MS);
-    }
-
     try {
       await reportProgress(options, {
         stage: "searching",
