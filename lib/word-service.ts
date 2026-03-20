@@ -17,6 +17,7 @@ export function createEmptyWordPayload(): WordFormPayload {
     audioUrl: "",
     source: "",
     notes: "",
+    itwewinaMetadata: undefined,
     beginnerExplanation: "",
     expertExplanation: "",
     meanings: [
@@ -103,6 +104,7 @@ function normalizePayload(payload: WordFormPayload) {
     audioUrl: emptyToUndefined(parsed.audioUrl),
     source: emptyToUndefined(parsed.source),
     notes: emptyToUndefined(normalizeLineBreaks(parsed.notes)),
+    itwewinaMetadata: parsed.itwewinaMetadata,
     beginnerExplanation: emptyToUndefined(normalizeLineBreaks(parsed.beginnerExplanation)),
     expertExplanation: emptyToUndefined(normalizeLineBreaks(parsed.expertExplanation)),
     meanings: normalizedMeanings,
@@ -153,6 +155,11 @@ function buildWordCoreData(payload: ReturnType<typeof normalizePayload>, slug: s
     audioUrl: payload.audioUrl,
     source: payload.source,
     notes: payload.notes,
+    ...(payload.itwewinaMetadata
+      ? {
+          itwewinaMetadata: payload.itwewinaMetadata as Prisma.InputJsonValue
+        }
+      : {}),
     beginnerExplanation: payload.beginnerExplanation,
     expertExplanation: payload.expertExplanation,
     isDemo: payload.isDemo,

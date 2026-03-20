@@ -62,6 +62,7 @@ function parseCsvPayload(rawText: string) {
     audioUrl: row.audioUrl ?? "",
     source: row.source ?? "",
     notes: row.notes ?? "",
+    itwewinaMetadata: parseNestedField(row.itwewinaMetadata, undefined),
     beginnerExplanation: row.beginnerExplanation ?? "",
     expertExplanation: row.expertExplanation ?? "",
     categoryIds: parseNestedField<string[]>(row.categoryIds, []),

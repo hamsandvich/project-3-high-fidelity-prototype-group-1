@@ -21,7 +21,17 @@ export async function POST(request: NextRequest) {
     const parsed =
       payload.mode === "itwewina"
         ? await buildItwewinaImportBatch(payload.text)
-        : { queryCount: undefined, words: parseImportInput(payload.mode, payload.text) };
+        : { queryCount: undefined, words: parseImportInput(payload.mode, payload.text), warnings: [] as string[] };
+
+    if (payload.mode === "itwewina" && parsed.words.length === 0) {
+      return NextResponse.json(
+        {
+          error: "No itwewina entries were found for the provided search terms."
+        },
+        { status: 400 }
+      );
+    }
+
     const result = await importWords(parsed.words);
 
     revalidatePath("/");
@@ -31,7 +41,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ...result,
-      queryCount: parsed.queryCount
+      queryCount: parsed.queryCount,
+      warnings: parsed.warnings.length > 0 ? parsed.warnings : undefined
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

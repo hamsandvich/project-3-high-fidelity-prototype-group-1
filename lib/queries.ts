@@ -5,6 +5,14 @@ import { HOME_CATEGORY_SLUGS, RELATION_TYPE_VALUES } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { getInverseRelationType, uniqueBy } from "@/lib/utils";
 import { createEmptyWordPayload } from "@/lib/word-service";
+import type { ItwewinaMetadata } from "@/types";
+
+function getSerializedItwewinaMetadata(record: unknown) {
+  return (record as { itwewinaMetadata?: Prisma.JsonValue | null }).itwewinaMetadata as
+    | ItwewinaMetadata
+    | null
+    | undefined;
+}
 
 const wordCardSelect = {
   id: true,
@@ -197,6 +205,7 @@ export async function getWordBySlug(slug: string) {
 
   return {
     ...word,
+    itwewinaMetadata: getSerializedItwewinaMetadata(word) ?? null,
     relatedWords,
     relatedSections
   };
@@ -360,6 +369,7 @@ export async function getWordEditorData(wordId?: string) {
       audioUrl: word.audioUrl ?? "",
       source: word.source ?? "",
       notes: word.notes ?? "",
+      itwewinaMetadata: getSerializedItwewinaMetadata(word) ?? undefined,
       beginnerExplanation: word.beginnerExplanation ?? "",
       expertExplanation: word.expertExplanation ?? "",
       isDemo: word.isDemo,

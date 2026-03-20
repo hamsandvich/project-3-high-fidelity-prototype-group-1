@@ -1,4 +1,4 @@
-import type { RelationTypeValue } from "@/types";
+import type { ItwewinaMetadata, RelationTypeValue } from "@/types";
 
 export interface CategoryBadgeModel {
   id: string;
@@ -76,6 +76,7 @@ export interface WordDetailModel extends WordCardModel {
   expertExplanation?: string | null;
   notes?: string | null;
   source?: string | null;
+  itwewinaMetadata?: ItwewinaMetadata | null;
   meanings: WordMeaningModel[];
   morphologyTables: MorphologyTableModel[];
   relatedWords: RelatedWordModel[];

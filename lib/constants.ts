@@ -119,6 +119,7 @@ export const IMPORT_CSV_COLUMNS = [
   "audioUrl",
   "source",
   "notes",
+  "itwewinaMetadata",
   "beginnerExplanation",
   "expertExplanation",
   "categorySlugs",

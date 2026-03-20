@@ -26,6 +26,25 @@ export const morphologyTableInputSchema = z.object({
   entries: z.array(morphologyEntryInputSchema).default([])
 });
 
+const itwewinaRelatedReferenceSchema = z.object({
+  kind: z.enum(["rapidwords", "wordnet"]),
+  label: z.string().trim().min(1, "Reference label is required"),
+  detail: z.string().trim().optional().or(z.literal("")),
+  url: z.string().trim().optional().or(z.literal(""))
+});
+
+const itwewinaInflectionalClassSchema = z.object({
+  code: z.string().trim().optional().or(z.literal("")),
+  emoji: z.string().trim().optional().or(z.literal("")),
+  description: z.string().trim().optional().or(z.literal("")),
+  examples: z.string().trim().optional().or(z.literal(""))
+});
+
+const itwewinaMetadataSchema = z.object({
+  relatedReferences: z.array(itwewinaRelatedReferenceSchema).optional(),
+  inflectionalClass: itwewinaInflectionalClassSchema.optional()
+});
+
 export const relationInputSchema = z.object({
   toWordId: z.string().trim().min(1, "Select a related word"),
   relationType: relationTypeSchema,
@@ -45,6 +64,7 @@ export const wordFormSchema = z.object({
   audioUrl: z.string().trim().optional().or(z.literal("")),
   source: z.string().trim().optional().or(z.literal("")),
   notes: z.string().trim().optional().or(z.literal("")),
+  itwewinaMetadata: itwewinaMetadataSchema.optional(),
   beginnerExplanation: z.string().trim().optional().or(z.literal("")),
   expertExplanation: z.string().trim().optional().or(z.literal("")),
   meanings: z.array(meaningInputSchema).default([]),

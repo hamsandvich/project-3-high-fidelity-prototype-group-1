@@ -1,19 +1,221 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { IMPORT_CSV_COLUMNS, IMPORT_ITWEWINA_EXAMPLE, IMPORT_JSON_EXAMPLE } from "@/lib/constants";
 
+type ItwewinaProgressStage = "starting" | "waiting" | "searching" | "retrying" | "complete" | "skipped";
+
+type ItwewinaProgressState = {
+  stage: ItwewinaProgressStage;
+  completed: number;
+  total: number;
+  term?: string;
+  status: string;
+};
+
+type ItwewinaImportProgressEvent = {
+  type: "progress";
+  stage: ItwewinaProgressStage;
+  completed: number;
+  total: number;
+  term?: string;
+  status: string;
+};
+
+type ItwewinaImportResultEvent = {
+  type: "result";
+  importedCount: number;
+  queryCount: number;
+  warnings?: string[];
+};
+
+type ItwewinaImportErrorEvent = {
+  type: "error";
+  error: string;
+};
+
+type ItwewinaImportStreamEvent =
+  | ItwewinaImportProgressEvent
+  | ItwewinaImportResultEvent
+  | ItwewinaImportErrorEvent;
+
+function buildProgressPercent(progress: ItwewinaProgressState) {
+  if (progress.total <= 0) {
+    return 0;
+  }
+
+  const inFlightStages = new Set<ItwewinaProgressStage>(["waiting", "searching", "retrying"]);
+  const inFlightOffset = progress.completed < progress.total && inFlightStages.has(progress.stage) ? 0.5 : 0;
+
+  return Math.min(100, Math.round(((progress.completed + inFlightOffset) / progress.total) * 100));
+}
+
+async function readItwewinaImportStream(
+  response: Response,
+  onEvent: (event: ItwewinaImportStreamEvent) => void
+) {
+  const reader = response.body?.getReader();
+
+  if (!reader) {
+    throw new Error("Import progress stream was unavailable.");
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+    let newlineIndex = buffer.indexOf("\n");
+
+    while (newlineIndex >= 0) {
+      const line = buffer.slice(0, newlineIndex).trim();
+      buffer = buffer.slice(newlineIndex + 1);
+
+      if (line) {
+        onEvent(JSON.parse(line) as ItwewinaImportStreamEvent);
+      }
+
+      newlineIndex = buffer.indexOf("\n");
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  const trailingLine = buffer.trim();
+
+  if (trailingLine) {
+    onEvent(JSON.parse(trailingLine) as ItwewinaImportStreamEvent);
+  }
+}
+
 export function ImportForm() {
   const [mode, setMode] = useState<"json" | "csv" | "itwewina">("json");
   const [text, setText] = useState(IMPORT_JSON_EXAMPLE);
   const [message, setMessage] = useState("");
+  const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
+  const [isRunning, setIsRunning] = useState(false);
+  const [progress, setProgress] = useState<ItwewinaProgressState | null>(null);
   const router = useRouter();
   const isItwewinaMode = mode === "itwewina";
+  const progressPercent = progress ? buildProgressPercent(progress) : 0;
+
+  async function runStandardImport() {
+    const response = await fetch("/api/admin/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, text })
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { importedCount?: number; queryCount?: number; warnings?: string[]; error?: string }
+      | null;
+
+    if (!response.ok) {
+      throw new Error(payload?.error ?? "Import failed.");
+    }
+
+    const importedCount = payload?.importedCount ?? 0;
+    const queryCount = payload?.queryCount;
+    const warnings = payload?.warnings ?? [];
+
+    setMessage(
+      queryCount
+        ? `Imported ${importedCount} entries from ${queryCount} itwewina search term(s).${
+            warnings.length > 0 ? ` Completed with ${warnings.length} warning(s).` : ""
+          }`
+        : `Imported ${importedCount} entries.`
+    );
+    setWarning(warnings.join("\n"));
+    router.refresh();
+  }
+
+  async function runItwewinaImport() {
+    const response = await fetch("/api/admin/import/itwewina", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(payload?.error ?? "Import failed.");
+    }
+
+    const result = await new Promise<ItwewinaImportResultEvent>((resolve, reject) => {
+      readItwewinaImportStream(response, (event) => {
+        if (event.type === "progress") {
+          setProgress({
+            stage: event.stage,
+            completed: event.completed,
+            total: event.total,
+            term: event.term,
+            status: event.status
+          });
+          return;
+        }
+
+        if (event.type === "result") {
+          resolve(event);
+          return;
+        }
+
+        reject(new Error(event.error));
+      }).catch(reject);
+    });
+
+    const warnings = result.warnings ?? [];
+
+    setProgress({
+      stage: "complete",
+      completed: result.queryCount,
+      total: result.queryCount,
+      status: "Import complete."
+    });
+    setMessage(
+      `Imported ${result.importedCount} entries from ${result.queryCount} itwewina search term(s).${
+        warnings.length > 0 ? ` Completed with ${warnings.length} warning(s).` : ""
+      }`
+    );
+    setWarning(warnings.join("\n"));
+    router.refresh();
+  }
+
+  async function handleImport() {
+    setError("");
+    setMessage("");
+    setWarning("");
+    setProgress(
+      isItwewinaMode
+        ? {
+            stage: "starting",
+            completed: 0,
+            total: 0,
+            status: "Preparing itwewina import."
+          }
+        : null
+    );
+    setIsRunning(true);
+
+    try {
+      if (isItwewinaMode) {
+        await runItwewinaImport();
+      } else {
+        await runStandardImport();
+      }
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Import failed.");
+    } finally {
+      setIsRunning(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -28,6 +230,8 @@ export function ImportForm() {
                 setMode(option);
                 setError("");
                 setMessage("");
+                setWarning("");
+                setProgress(null);
                 setText(
                   option === "json" ? IMPORT_JSON_EXAMPLE : option === "itwewina" ? IMPORT_ITWEWINA_EXAMPLE : ""
                 );
@@ -51,9 +255,45 @@ export function ImportForm() {
         {isItwewinaMode ? (
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Add one Cree or English search term per line. The server will fetch
-            <code> https://itwewina.altlab.app/search?q=...</code>, parse the live search results, and import the
-            returned entries into this app.
+            <code> https://itwewina.altlab.app/search?q=...</code>, parse the live search results, then enrich each
+            matched entry from its full Itwêwina word page to pull related references and paradigm labels. Searches run
+            one at a time with a 10-second pause to reduce upstream rate limits, and any skipped terms or partial
+            enrichments are listed as warnings.
           </p>
+        ) : null}
+
+        {isItwewinaMode && progress ? (
+          <div className="surface-muted mt-4 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="section-label">Import progress</p>
+                <p className="mt-2 text-lg text-slate-900">{progress.status}</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {progress.term ? `Current word: ${progress.term}` : "Current word: preparing import"}
+                </p>
+              </div>
+              <div className="text-left md:text-right">
+                <p className="text-2xl font-semibold text-slate-900">{progressPercent}%</p>
+                <p className="text-sm text-slate-500">
+                  {progress.total > 0 ? `${progress.completed} of ${progress.total} terms processed` : "Waiting to start"}
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="mt-4 h-3 overflow-hidden rounded-full bg-slate-200"
+              aria-label="Itwewina import progress"
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={progressPercent}
+              role="progressbar"
+            >
+              <div
+                className="h-full rounded-full bg-moss-700 transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
         ) : null}
 
         <label className="tap-button-secondary mt-3 inline-flex cursor-pointer">
@@ -80,45 +320,12 @@ export function ImportForm() {
           />
         </label>
 
-        {message ? <p className="mt-3 text-sm text-moss-700">{message}</p> : null}
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        {message ? <p className="mt-3 whitespace-pre-line text-sm text-moss-700">{message}</p> : null}
+        {warning ? <p className="mt-3 whitespace-pre-line text-sm text-amber-700">{warning}</p> : null}
+        {error ? <p className="mt-3 whitespace-pre-line text-sm text-red-600">{error}</p> : null}
 
-        <button
-          type="button"
-          className="tap-button-primary mt-4"
-          disabled={isPending}
-          onClick={() => {
-            setError("");
-            setMessage("");
-
-            startTransition(async () => {
-              const response = await fetch("/api/admin/import", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ mode, text })
-              });
-
-              const payload = (await response.json().catch(() => null)) as
-                | { importedCount?: number; queryCount?: number; error?: string }
-                | null;
-
-              if (!response.ok) {
-                setError(payload?.error ?? "Import failed.");
-                return;
-              }
-
-              const importedCount = payload?.importedCount ?? 0;
-              const queryCount = payload?.queryCount;
-              setMessage(
-                queryCount
-                  ? `Imported ${importedCount} entries from ${queryCount} itwewina search term(s).`
-                  : `Imported ${importedCount} entries.`
-              );
-              router.refresh();
-            });
-          }}
-        >
-          {isPending ? "Importing..." : "Run import"}
+        <button type="button" className="tap-button-primary mt-4" disabled={isRunning} onClick={() => void handleImport()}>
+          {isRunning ? "Importing..." : "Run import"}
         </button>
       </section>
 

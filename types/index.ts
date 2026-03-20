@@ -43,6 +43,25 @@ export interface MorphologyTableInput {
   entries: MorphologyEntryInput[];
 }
 
+export interface ItwewinaRelatedReference {
+  kind: "rapidwords" | "wordnet";
+  label: string;
+  detail?: string;
+  url?: string;
+}
+
+export interface ItwewinaInflectionalClass {
+  code?: string;
+  emoji?: string;
+  description?: string;
+  examples?: string;
+}
+
+export interface ItwewinaMetadata {
+  relatedReferences?: ItwewinaRelatedReference[];
+  inflectionalClass?: ItwewinaInflectionalClass;
+}
+
 export interface RelationInput {
   toWordId: string;
   relationType: RelationTypeValue;
@@ -62,6 +81,7 @@ export interface WordFormPayload {
   audioUrl?: string;
   source?: string;
   notes?: string;
+  itwewinaMetadata?: ItwewinaMetadata;
   beginnerExplanation?: string;
   expertExplanation?: string;
   meanings: MeaningInput[];
