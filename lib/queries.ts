@@ -235,12 +235,10 @@ export async function getDashboardData() {
   };
 }
 
-export async function getAdminWords(query?: string, demoStatus: "all" | "demo" | "live" = "all") {
+export async function getAdminWords(query?: string) {
   noStore();
 
   const normalized = query?.trim();
-  const demoFilter =
-    demoStatus === "demo" ? true : demoStatus === "live" ? false : undefined;
 
   return prisma.word.findMany({
     where: {
@@ -253,8 +251,7 @@ export async function getAdminWords(query?: string, demoStatus: "all" | "demo" |
               { partOfSpeech: { contains: normalized, mode: "insensitive" } }
             ]
           }
-        : {}),
-      ...(demoFilter === undefined ? {} : { isDemo: demoFilter })
+        : {})
     },
     include: {
       categories: {
@@ -362,7 +359,6 @@ export async function getWordEditorData(wordId?: string) {
       itwewinaMetadata: getSerializedItwewinaMetadata(word) ?? undefined,
       beginnerExplanation: word.beginnerExplanation ?? "",
       expertExplanation: word.expertExplanation ?? "",
-      isDemo: word.isDemo,
       categoryIds: word.categories.map((category) => category.categoryId),
       meanings:
         word.meanings.length > 0

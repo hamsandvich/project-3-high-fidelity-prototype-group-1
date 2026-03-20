@@ -29,8 +29,7 @@ export function createEmptyWordPayload(): WordFormPayload {
     ],
     categoryIds: [],
     morphologyTables: [],
-    relations: [],
-    isDemo: true
+    relations: []
   };
 }
 
@@ -110,8 +109,7 @@ function normalizePayload(payload: WordFormPayload) {
     meanings: normalizedMeanings,
     categoryIds: uniqueBy(parsed.categoryIds.filter(Boolean), (item) => item),
     morphologyTables: normalizedTables,
-    relations: normalizedRelations,
-    isDemo: parsed.isDemo
+    relations: normalizedRelations
   };
 }
 
@@ -162,7 +160,7 @@ function buildWordCoreData(payload: ReturnType<typeof normalizePayload>, slug: s
       : {}),
     beginnerExplanation: payload.beginnerExplanation,
     expertExplanation: payload.expertExplanation,
-    isDemo: payload.isDemo,
+    isDemo: false,
     meanings: {
       create: payload.meanings.map((meaning) => ({
         gloss: meaning.gloss,
@@ -255,17 +253,5 @@ export async function saveWord(payload: WordFormPayload, existingWordId?: string
 export async function deleteWord(wordId: string) {
   await prisma.word.delete({
     where: { id: wordId }
-  });
-}
-
-export async function setWordDemoStatus(wordId: string, isDemo: boolean) {
-  return prisma.word.update({
-    where: { id: wordId },
-    data: { isDemo },
-    select: {
-      id: true,
-      slug: true,
-      isDemo: true
-    }
   });
 }

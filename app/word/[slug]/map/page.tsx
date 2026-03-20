@@ -23,7 +23,7 @@ export default async function MapPage({ params }: MapPageProps) {
   return (
     <PageFrame
       title={`${word.lemma} map`}
-      subtitle="A simple semantic snapshot of directly connected demo words."
+      subtitle="A simple semantic snapshot of directly connected words."
       backHref={`/word/${word.slug}`}
     >
       {word.relatedWords.length ? (
@@ -31,7 +31,7 @@ export default async function MapPage({ params }: MapPageProps) {
       ) : (
         <EmptyState
           title="No connections yet"
-          description="This word does not have any demo relations yet, so the map is empty."
+          description="This word does not have any related entries yet, so the map is empty."
         />
       )}
     </PageFrame>

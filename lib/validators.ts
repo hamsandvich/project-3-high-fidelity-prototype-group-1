@@ -70,8 +70,7 @@ export const wordFormSchema = z.object({
   meanings: z.array(meaningInputSchema).default([]),
   categoryIds: z.array(z.string().trim()).default([]),
   morphologyTables: z.array(morphologyTableInputSchema).default([]),
-  relations: z.array(relationInputSchema).default([]),
-  isDemo: z.boolean().default(true)
+  relations: z.array(relationInputSchema).default([])
 });
 
 export const categorySchema = z.object({

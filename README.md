@@ -10,7 +10,7 @@ The project is built with:
 - Prisma ORM
 - PostgreSQL
 - Docker + docker-compose
-- Seeded demo data for ALTLab-style vocabulary exploration
+- Seed reset that prepares empty theme scaffolding for real vocabulary
 
 ## What’s Included
 
@@ -86,7 +86,7 @@ Core MVP features:
 
 The app uses Next.js App Router for both public pages and admin pages. Public pages are mostly server-rendered and fetch data directly through Prisma-backed query helpers. Interactive concerns such as bookmarks, settings, and novice/expert toggles are handled in small client components.
 
-The admin area is also built inside the App Router. CRUD and import actions submit to route handlers under `app/api/admin/*`, which validate payloads with Zod and persist data through shared Prisma service functions. Categories, meanings, morphology tables, and relations are normalized so seeded data can later be replaced with real ALTLab lexical data without rewriting the UI.
+The admin area is also built inside the App Router. CRUD and import actions submit to route handlers under `app/api/admin/*`, which validate payloads with Zod and persist data through shared Prisma service functions. Categories, meanings, morphology tables, and relations are normalized so real ALTLab lexical data can be added or imported without rewriting the UI.
 
 ## Prisma Schema
 
@@ -139,7 +139,7 @@ npx prisma generate
 npx prisma migrate dev
 ```
 
-5. Seed the demo data:
+5. Reset the catalog to empty theme scaffolding:
 
 ```bash
 npm run db:seed
@@ -161,7 +161,7 @@ http://localhost:3000/admin
 Admin unlock code defaults to the value in `.env`:
 
 ```text
-ADMIN_ACCESS_CODE=altlab-demo-admin
+ADMIN_ACCESS_CODE=altlab-admin
 ```
 
 AI features also use these environment variables:
@@ -235,7 +235,7 @@ If your logs show `HOST:5432`, the placeholder connection string is still being 
 npx prisma migrate deploy
 ```
 
-9. Seed demo data if you want the prototype content loaded:
+9. Seed the starter theme scaffolding if you want the default categories loaded:
 
 ```bash
 npm run db:seed
@@ -278,13 +278,8 @@ If `OPENAI_API_KEY` is not configured, imports still succeed and the admin UI sh
 - The saved words page now includes an AI flashcard generator for the learner's bookmarked words.
 - The search page can answer question-style prompts by using OpenAI with local dictionary entries as grounding context.
 
-## Seed Data Notes
+## Seed Reset Notes
 
-The seed data is intentionally marked as demo content. It is designed to:
+Running `npm run db:seed` now clears existing vocabulary content and recreates the default theme categories without adding any word entries.
 
-- populate the body parts category with 10+ entries
-- add a few animals, weather, and colour terms
-- demonstrate novice/expert toggling with at least one richer morphology example
-- populate semantic relations for the graph and related-word sections
-
-This prototype is ready for real, verified ALTLab data to replace the demo content later.
+Use the admin editor or import tools to load real vocabulary after the reset.

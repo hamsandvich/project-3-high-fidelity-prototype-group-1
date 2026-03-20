@@ -73,9 +73,7 @@ export async function POST(request: NextRequest) {
             unitLabel: "matched entries"
           });
 
-          const result = await importWords(parsed.words, {
-            preserveDemoFallbacks: false
-          });
+          const result = await importWords(parsed.words);
           const warnings = [...parsed.warnings];
 
           revalidatePath("/");

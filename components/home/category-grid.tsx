@@ -25,7 +25,9 @@ export function CategoryGrid({ categories, randomWordSlug }: CategoryGridProps) 
             <ArrowUpRight className="h-4 w-4 text-slate-400" />
           </div>
           <div className="mt-4 space-y-2">
-            <p className="text-xs font-medium text-slate-500">{category._count.words} demo words</p>
+            <p className="text-xs font-medium text-slate-500">
+              {category._count.words} {category._count.words === 1 ? "word" : "words"}
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {category.words.slice(0, 2).map((item) => (
                 <span key={item.word.id} className="chip">

@@ -200,10 +200,6 @@ export function WordDetailView({ word }: WordDetailViewProps) {
   }, [labelModeGroups, selectedLabelMode]);
 
   const creeFirst = preferences.uiLanguageEmphasis === "cree";
-  const primaryExplanation =
-    mode === "novice"
-      ? word.beginnerExplanation ?? "A learner-friendly explanation has not been added yet."
-      : word.expertExplanation ?? word.beginnerExplanation ?? "An expert explanation has not been added yet.";
 
   return (
     <div className="space-y-4">
@@ -253,6 +249,16 @@ export function WordDetailView({ word }: WordDetailViewProps) {
           </Link>
         </div>
 
+        {word.categories.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {word.categories.map((entry) => (
+              <Link key={entry.category.id} href={`/category/${entry.category.slug}`} className="chip">
+                {entry.category.name}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+
         {mode === "expert" && (inflectionalClass || word.rootStem) ? (
           <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50/90 p-4">
             <div className="flex flex-wrap items-center gap-3 text-slate-900">
@@ -289,19 +295,6 @@ export function WordDetailView({ word }: WordDetailViewProps) {
               </button>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="surface-card p-5">
-        <p className="section-label">{mode === "novice" ? "Beginner explanation" : "Expert explanation"}</p>
-        <p className="mt-3 text-sm leading-7 text-slate-700">{primaryExplanation}</p>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          {word.categories.map((entry) => (
-            <Link key={entry.category.id} href={`/category/${entry.category.slug}`} className="chip">
-              {entry.category.name}
-            </Link>
-          ))}
         </div>
       </section>
 

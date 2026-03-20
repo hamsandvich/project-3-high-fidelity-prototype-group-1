@@ -88,7 +88,6 @@ export interface WordFormPayload {
   categoryIds: string[];
   morphologyTables: MorphologyTableInput[];
   relations: RelationInput[];
-  isDemo: boolean;
 }
 
 export interface CategoryOption {

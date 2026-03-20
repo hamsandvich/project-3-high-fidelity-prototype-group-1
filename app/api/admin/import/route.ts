@@ -32,9 +32,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await importWords(parsed.words, {
-      preserveDemoFallbacks: payload.mode !== "itwewina"
-    });
+    const result = await importWords(parsed.words);
     const warnings = [...parsed.warnings];
 
     revalidatePath("/");

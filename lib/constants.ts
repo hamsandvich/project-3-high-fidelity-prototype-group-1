@@ -78,9 +78,9 @@ export const IMPORT_JSON_EXAMPLE = `[
     "lemma": "miskîsik",
     "plainEnglish": "eye",
     "partOfSpeech": "dependent noun",
-    "linguisticClass": "NDI-1 (demo label)",
+    "linguisticClass": "NDI-1",
     "beginnerExplanation": "A word for the eye, used in body-related vocabulary.",
-    "expertExplanation": "Demo seed entry used to prototype dependent noun analysis.",
+    "expertExplanation": "Dependent noun entry with beginner-friendly possession examples.",
     "categorySlugs": ["body-parts"],
     "meanings": [
       { "gloss": "eye", "description": "Primary gloss", "sortOrder": 0 }
@@ -99,8 +99,7 @@ export const IMPORT_JSON_EXAMPLE = `[
     ],
     "relations": [
       { "targetLemma": "mistikwân", "relationType": "associated", "isBidirectional": true }
-    ],
-    "isDemo": true
+    ]
   }
 ]`;
 
@@ -125,6 +124,5 @@ export const IMPORT_CSV_COLUMNS = [
   "categorySlugs",
   "meanings",
   "morphologyTables",
-  "relations",
-  "isDemo"
+  "relations"
 ] as const;

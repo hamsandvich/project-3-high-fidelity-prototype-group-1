@@ -36,8 +36,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         </div>
       ) : (
         <EmptyState
-          title="No demo words yet"
-          description="This category is scaffolded for future ALTLab data entry, but it does not have seed content yet."
+          title="No words yet"
+          description="This theme is ready for real vocabulary as soon as you add or import it."
         />
       )}
     </PageFrame>

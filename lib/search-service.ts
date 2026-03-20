@@ -383,9 +383,7 @@ export async function importSearchTermFromItwewina(query: string): Promise<Searc
     };
   }
 
-  const result = await importWords(parsed.words, {
-    preserveDemoFallbacks: false
-  });
+  const result = await importWords(parsed.words);
 
   return {
     status: "imported",

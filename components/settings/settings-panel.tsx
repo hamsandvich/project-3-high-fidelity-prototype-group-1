@@ -56,7 +56,7 @@ export function SettingsPanel() {
           <div>
             <p className="section-label">Syllabics</p>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Show or hide syllabics wherever seed content includes them.
+              Show or hide syllabics wherever a word includes them.
             </p>
           </div>
           <button

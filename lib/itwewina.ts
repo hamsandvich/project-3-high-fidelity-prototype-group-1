@@ -468,8 +468,7 @@ function mapEntryToImportWord(entry: ItwewinaSearchEntry): ImportWordPayload {
     categoryIds: [],
     meanings,
     morphologyTables: entry.morphologyTables,
-    relations: [],
-    isDemo: false
+    relations: []
   };
 }
 

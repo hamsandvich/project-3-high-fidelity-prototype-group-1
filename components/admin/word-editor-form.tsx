@@ -196,14 +196,6 @@ export function WordEditorForm({ mode, initialPayload, categories, wordOptions }
           />
         </div>
 
-        <label className="mt-4 flex items-center gap-3 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={form.isDemo}
-            onChange={(event) => updateField("isDemo", event.target.checked)}
-          />
-          Mark this record as demo content
-        </label>
       </section>
 
       <section className="surface-card p-5">

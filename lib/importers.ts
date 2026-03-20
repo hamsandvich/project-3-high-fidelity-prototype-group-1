@@ -2,179 +2,41 @@ import Papa from "papaparse";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { saveWordCore, replaceWordRelations } from "@/lib/word-service";
-import { slugify, toBoolean } from "@/lib/utils";
+import { replaceWordRelations, saveWordCore } from "@/lib/word-service";
+import { slugify } from "@/lib/utils";
 import { importBatchSchema } from "@/lib/validators";
 import type { ImportWordPayload, RelationInput, WordFormPayload } from "@/types";
 
 const existingImportWordSelect = {
   id: true,
   slug: true,
-  lemma: true,
-  plainEnglish: true,
-  partOfSpeech: true,
-  isDemo: true
+  lemma: true
 } satisfies Prisma.WordSelect;
 
 type ExistingImportWord = Prisma.WordGetPayload<{
   select: typeof existingImportWordSelect;
 }>;
 
-const demoImportOverwriteInclude = {
-  meanings: {
-    orderBy: [{ sortOrder: "asc" }]
-  },
-  morphologyTables: {
-    orderBy: [{ sortOrder: "asc" }],
-    include: {
-      entries: {
-        orderBy: [{ sortOrder: "asc" }]
-      }
-    }
-  },
-  categories: {
-    orderBy: [{ sortOrder: "asc" }],
-    select: {
-      categoryId: true
-    }
-  },
-  outgoingRelations: {
-    orderBy: [{ createdAt: "asc" }],
-    select: {
-      toWordId: true,
-      relationType: true,
-      label: true,
-      isBidirectional: true
-    }
-  }
-} satisfies Prisma.WordInclude;
-
-type ExistingDemoImportWord = Prisma.WordGetPayload<{
-  include: typeof demoImportOverwriteInclude;
-}>;
-
-type ImportWordsOptions = {
-  preserveDemoFallbacks?: boolean;
-};
-
-function hasTextContent(value?: string | null) {
-  return (value ?? "").trim().length > 0;
-}
-
-function chooseImportedText(importedValue: string | undefined, existingValue?: string | null) {
-  return hasTextContent(importedValue) ? importedValue ?? "" : existingValue ?? "";
-}
-
-function mapExistingMeanings(meanings: ExistingDemoImportWord["meanings"]): WordFormPayload["meanings"] {
-  return meanings.map((meaning, index) => ({
-    gloss: meaning.gloss,
-    description: meaning.description ?? "",
-    sortOrder: index
-  }));
-}
-
-function mapExistingMorphologyTables(
-  tables: ExistingDemoImportWord["morphologyTables"]
-): WordFormPayload["morphologyTables"] {
-  return tables.map((table, tableIndex) => ({
-    title: table.title,
-    description: table.description ?? "",
-    isPlainEnglish: table.isPlainEnglish,
-    sortOrder: tableIndex,
-    entries: table.entries.map((entry, entryIndex) => ({
-      rowLabel: entry.rowLabel,
-      columnLabel: entry.columnLabel ?? "",
-      plainLabel: entry.plainLabel ?? "",
-      value: entry.value,
-      sortOrder: entryIndex
-    }))
-  }));
-}
-
-function mapExistingRelations(
-  relations: ExistingDemoImportWord["outgoingRelations"]
-): NonNullable<ImportWordPayload["relations"]> {
-  return relations.map((relation) => ({
-    toWordId: relation.toWordId,
-    relationType: relation.relationType,
-    label: relation.label ?? "",
-    isBidirectional: relation.isBidirectional
-  }));
-}
-
-function findDemoWordByPlainEnglish(
-  word: ImportWordPayload,
-  demoWordsByPlainEnglish: Map<string, ExistingImportWord[]>
-) {
-  if (word.isDemo) {
-    return undefined;
-  }
-
-  const normalizedGloss = word.plainEnglish.trim().toLowerCase();
-  if (!normalizedGloss) {
-    return undefined;
-  }
-
-  const demoMatches = demoWordsByPlainEnglish.get(normalizedGloss) ?? [];
-  if (demoMatches.length === 0) {
-    return undefined;
-  }
-
-  const normalizedPartOfSpeech = word.partOfSpeech.trim().toLowerCase();
-  if (!normalizedPartOfSpeech) {
-    return demoMatches[0];
-  }
-
-  return (
-    demoMatches.find((candidate) => candidate.partOfSpeech.trim().toLowerCase() === normalizedPartOfSpeech) ??
-    demoMatches[0]
-  );
-}
-
-function buildImportWordPayload(
-  word: ImportWordPayload,
-  categoryIds: string[],
-  existingDemoWord?: ExistingDemoImportWord,
-  options: ImportWordsOptions = {}
-): WordFormPayload {
-  const fallbackDemoWord = options.preserveDemoFallbacks ? existingDemoWord : undefined;
-  const fallbackCategoryIds = fallbackDemoWord?.categories.map((entry) => entry.categoryId) ?? [];
-  const fallbackMeanings = fallbackDemoWord ? mapExistingMeanings(fallbackDemoWord.meanings) : [];
-  const fallbackMorphologyTables = fallbackDemoWord ? mapExistingMorphologyTables(fallbackDemoWord.morphologyTables) : [];
-
+function buildImportWordPayload(word: ImportWordPayload, categoryIds: string[]): WordFormPayload {
   return {
-    lemma: chooseImportedText(word.lemma, fallbackDemoWord?.lemma),
-    syllabics: chooseImportedText(word.syllabics, fallbackDemoWord?.syllabics),
-    plainEnglish: chooseImportedText(word.plainEnglish, fallbackDemoWord?.plainEnglish),
-    partOfSpeech: chooseImportedText(word.partOfSpeech, fallbackDemoWord?.partOfSpeech),
-    linguisticClass: chooseImportedText(word.linguisticClass, fallbackDemoWord?.linguisticClass),
-    rootStem: chooseImportedText(word.rootStem, fallbackDemoWord?.rootStem),
-    pronunciation: chooseImportedText(word.pronunciation, fallbackDemoWord?.pronunciation),
-    audioUrl: chooseImportedText(word.audioUrl, fallbackDemoWord?.audioUrl),
-    source: chooseImportedText(word.source, fallbackDemoWord?.source),
-    notes: chooseImportedText(word.notes, fallbackDemoWord?.notes),
-    itwewinaMetadata:
-      word.itwewinaMetadata ?? (fallbackDemoWord?.itwewinaMetadata as ImportWordPayload["itwewinaMetadata"] | null) ?? undefined,
-    beginnerExplanation: chooseImportedText(word.beginnerExplanation, fallbackDemoWord?.beginnerExplanation),
-    expertExplanation: chooseImportedText(word.expertExplanation, fallbackDemoWord?.expertExplanation),
-    categoryIds: categoryIds.length > 0 ? categoryIds : fallbackCategoryIds,
-    meanings: word.meanings.length > 0 ? word.meanings : fallbackMeanings,
-    morphologyTables: word.morphologyTables.length > 0 ? word.morphologyTables : fallbackMorphologyTables,
-    relations: [],
-    isDemo: word.isDemo
+    lemma: word.lemma,
+    syllabics: word.syllabics,
+    plainEnglish: word.plainEnglish,
+    partOfSpeech: word.partOfSpeech,
+    linguisticClass: word.linguisticClass,
+    rootStem: word.rootStem,
+    pronunciation: word.pronunciation,
+    audioUrl: word.audioUrl,
+    source: word.source,
+    notes: word.notes,
+    itwewinaMetadata: word.itwewinaMetadata,
+    beginnerExplanation: word.beginnerExplanation,
+    expertExplanation: word.expertExplanation,
+    categoryIds,
+    meanings: word.meanings,
+    morphologyTables: word.morphologyTables,
+    relations: []
   };
-}
-
-function buildImportRelationSource(
-  word: ImportWordPayload,
-  existingDemoWord?: ExistingDemoImportWord,
-  options: ImportWordsOptions = {}
-): NonNullable<ImportWordPayload["relations"]> {
-  if ((word.relations ?? []).length > 0) {
-    return word.relations ?? [];
-  }
-
-  return options.preserveDemoFallbacks && existingDemoWord ? mapExistingRelations(existingDemoWord.outgoingRelations) : [];
 }
 
 function parseJsonPayload(rawText: string) {
@@ -241,8 +103,7 @@ function parseCsvPayload(rawText: string) {
     categoryNames: parseNestedField<string[]>(row.categoryNames, parseListField(row.categoryNames)),
     meanings: parseNestedField(row.meanings, []),
     morphologyTables: parseNestedField(row.morphologyTables, []),
-    relations: parseNestedField(row.relations, []),
-    isDemo: toBoolean(row.isDemo, true)
+    relations: parseNestedField(row.relations, [])
   }));
 }
 
@@ -298,74 +159,27 @@ function buildCategoryIds(word: ImportWordPayload, categoryMap: Map<string, stri
   return [...directIds, ...slugIds, ...nameIds].filter((value): value is string => Boolean(value));
 }
 
-export async function importWords(words: ImportWordPayload[], options: ImportWordsOptions = {}) {
+export async function importWords(words: ImportWordPayload[]) {
   const batch = importBatchSchema.parse(words);
-  const preserveDemoFallbacks = options.preserveDemoFallbacks ?? true;
   const categoryMap = await ensureCategoryIdMaps(batch);
 
   const existingWords = await prisma.word.findMany({
     select: existingImportWordSelect
   });
 
+  const wordById = new Map(existingWords.map((word) => [word.id, word]));
   const wordBySlug = new Map(existingWords.map((word) => [word.slug, word]));
   const wordByLemma = new Map(existingWords.map((word) => [word.lemma.toLowerCase(), word]));
-  const demoWordsByPlainEnglish = new Map<string, ExistingImportWord[]>();
   const relationSourcesByWordId = new Map<string, NonNullable<ImportWordPayload["relations"]>>();
-  const demoOverwriteCache = new Map<string, ExistingDemoImportWord>();
-
-  existingWords.forEach((word) => {
-    if (!word.isDemo) {
-      return;
-    }
-
-    const key = word.plainEnglish.trim().toLowerCase();
-    if (!key) {
-      return;
-    }
-
-    const existing = demoWordsByPlainEnglish.get(key) ?? [];
-    existing.push(word);
-    demoWordsByPlainEnglish.set(key, existing);
-  });
 
   for (const word of batch) {
     const categoryIds = buildCategoryIds(word, categoryMap);
     const guessedSlug = slugify(word.lemma);
-    const existing =
-      wordBySlug.get(guessedSlug) ??
-      wordByLemma.get(word.lemma.toLowerCase()) ??
-      findDemoWordByPlainEnglish(word, demoWordsByPlainEnglish);
-
-    let existingDemoWord: ExistingDemoImportWord | undefined;
-
-    if (existing?.isDemo && !word.isDemo && preserveDemoFallbacks) {
-      existingDemoWord = demoOverwriteCache.get(existing.id);
-
-      if (!existingDemoWord) {
-        const loadedDemoWord = await prisma.word.findUnique({
-          where: { id: existing.id },
-          include: demoImportOverwriteInclude
-        });
-
-        if (!loadedDemoWord) {
-          throw new Error(`Unable to load demo word ${existing.lemma} for import overwrite.`);
-        }
-
-        existingDemoWord = loadedDemoWord;
-        demoOverwriteCache.set(existing.id, loadedDemoWord);
-      }
-    }
-
-    const payload = buildImportWordPayload(word, categoryIds, existingDemoWord, {
-      preserveDemoFallbacks
-    });
-    const relationSource = buildImportRelationSource(word, existingDemoWord, {
-      preserveDemoFallbacks
-    });
+    const existing = wordBySlug.get(guessedSlug) ?? wordByLemma.get(word.lemma.toLowerCase());
 
     const saved = await saveWordCore(
       {
-        ...payload,
+        ...buildImportWordPayload(word, categoryIds),
         relations: []
       },
       existing?.id
@@ -374,13 +188,11 @@ export async function importWords(words: ImportWordPayload[], options: ImportWor
     const savedSummary: ExistingImportWord = {
       id: saved.id,
       slug: saved.slug,
-      lemma: saved.lemma,
-      plainEnglish: saved.plainEnglish,
-      partOfSpeech: saved.partOfSpeech,
-      isDemo: saved.isDemo
+      lemma: saved.lemma
     };
 
-    relationSourcesByWordId.set(saved.id, relationSource);
+    relationSourcesByWordId.set(saved.id, word.relations ?? []);
+    wordById.set(savedSummary.id, savedSummary);
     wordBySlug.set(savedSummary.slug, savedSummary);
     wordByLemma.set(savedSummary.lemma.toLowerCase(), savedSummary);
   }
@@ -389,7 +201,7 @@ export async function importWords(words: ImportWordPayload[], options: ImportWor
     const relations = relationSource
       .map<RelationInput | null>((relation) => {
         const target =
-          (relation.toWordId ? Array.from(wordBySlug.values()).find((entry) => entry.id === relation.toWordId) : undefined) ??
+          (relation.toWordId ? wordById.get(relation.toWordId) : undefined) ??
           (relation.targetSlug ? wordBySlug.get(slugify(relation.targetSlug)) : undefined) ??
           (relation.targetLemma ? wordByLemma.get(relation.targetLemma.toLowerCase()) : undefined);
 
