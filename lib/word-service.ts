@@ -257,3 +257,15 @@ export async function deleteWord(wordId: string) {
     where: { id: wordId }
   });
 }
+
+export async function setWordDemoStatus(wordId: string, isDemo: boolean) {
+  return prisma.word.update({
+    where: { id: wordId },
+    data: { isDemo },
+    select: {
+      id: true,
+      slug: true,
+      isDemo: true
+    }
+  });
+}

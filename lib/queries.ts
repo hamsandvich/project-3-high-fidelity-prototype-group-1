@@ -235,22 +235,27 @@ export async function getDashboardData() {
   };
 }
 
-export async function getAdminWords(query?: string) {
+export async function getAdminWords(query?: string, demoStatus: "all" | "demo" | "live" = "all") {
   noStore();
 
   const normalized = query?.trim();
+  const demoFilter =
+    demoStatus === "demo" ? true : demoStatus === "live" ? false : undefined;
 
   return prisma.word.findMany({
-    where: normalized
-      ? {
-          OR: [
-            { lemma: { contains: normalized, mode: "insensitive" } },
-            { plainEnglish: { contains: normalized, mode: "insensitive" } },
-            { slug: { contains: normalized, mode: "insensitive" } },
-            { partOfSpeech: { contains: normalized, mode: "insensitive" } }
-          ]
-        }
-      : undefined,
+    where: {
+      ...(normalized
+        ? {
+            OR: [
+              { lemma: { contains: normalized, mode: "insensitive" } },
+              { plainEnglish: { contains: normalized, mode: "insensitive" } },
+              { slug: { contains: normalized, mode: "insensitive" } },
+              { partOfSpeech: { contains: normalized, mode: "insensitive" } }
+            ]
+          }
+        : {}),
+      ...(demoFilter === undefined ? {} : { isDemo: demoFilter })
+    },
     include: {
       categories: {
         orderBy: [{ sortOrder: "asc" }],
