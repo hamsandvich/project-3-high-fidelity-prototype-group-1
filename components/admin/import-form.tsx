@@ -335,7 +335,7 @@ export function ImportForm() {
             Add one Cree or English search term per line. The server will fetch
             <code> https://itwewina.altlab.app/search?q=...</code>, parse the live search results, then enrich each
             matched entry from its full Itwêwina word page to pull related references and paradigm labels. Searches run
-            one at a time with a 10-second pause to reduce upstream rate limits, and any skipped terms or partial
+            one at a time with a 1-second pause to reduce upstream rate limits, and any skipped terms or partial
             enrichments are listed as warnings.
           </p>
         ) : null}
