@@ -1,8 +1,6 @@
-import { z } from "zod";
-import { type NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import { generateLessonPlanForCategory, type GeneratedLessonPlan } from "@/lib/ai";
-import { isMailConfigured, sendEmail } from "@/lib/mailer";
 import { buildPdfDocument, type PdfSection } from "@/lib/pdf";
 
 export const runtime = "nodejs";
@@ -12,10 +10,6 @@ type RouteContext = {
     slug: string;
   }>;
 };
-
-const requestSchema = z.object({
-  email: z.string().trim().email("Enter a valid teacher email address.")
-});
 
 function buildLessonPlanSections(
   categoryName: string,
@@ -70,18 +64,8 @@ function buildLessonPlanSections(
   ];
 }
 
-export async function POST(request: NextRequest, { params }: RouteContext) {
+export async function POST(_request: Request, { params }: RouteContext) {
   try {
-    if (!isMailConfigured()) {
-      return NextResponse.json(
-        {
-          error: "Email sending is not configured. Add SMTP_USER and SMTP_PASS for your university Google account."
-        },
-        { status: 500 }
-      );
-    }
-
-    const payload = requestSchema.parse(await request.json());
     const { slug } = await params;
     const lessonPlan = await generateLessonPlanForCategory(slug);
     const pdfBuffer = await buildPdfDocument({
@@ -90,51 +74,15 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       sections: buildLessonPlanSections(lessonPlan.category.name, lessonPlan.wordCount, lessonPlan.plan)
     });
     const filename = `${lessonPlan.category.slug}-lesson-plan-${new Date().toISOString().slice(0, 10)}.pdf`;
-
-    await sendEmail({
-      to: payload.email,
-      subject: lessonPlan.plan.emailSubject,
-      text: [
-        `Your AI lesson plan for the ${lessonPlan.category.name} theme is attached as a PDF.`,
-        "",
-        lessonPlan.plan.emailPreview,
-        "",
-        `Title: ${lessonPlan.plan.title}`,
-        `Vocabulary entries used: ${lessonPlan.wordCount}`
-      ].join("\n"),
-      html: `
-        <div style="font-family: Avenir Next, Segoe UI, Arial, sans-serif; color: #24323b; line-height: 1.6;">
-          <h1 style="font-family: Georgia, serif; font-size: 24px; margin-bottom: 8px;">${lessonPlan.plan.title}</h1>
-          <p style="margin-top: 0;">${lessonPlan.plan.emailPreview}</p>
-          <p><strong>Theme:</strong> ${lessonPlan.category.name}</p>
-          <p><strong>Vocabulary entries used:</strong> ${lessonPlan.wordCount}</p>
-          <p>The PDF lesson plan is attached to this email.</p>
-        </div>
-      `,
-      attachments: [
-        {
-          filename,
-          content: pdfBuffer,
-          contentType: "application/pdf"
-        }
-      ]
-    });
-
-    return NextResponse.json({
-      message: `Lesson plan emailed to ${payload.email}.`,
-      title: lessonPlan.plan.title,
-      wordCount: lessonPlan.wordCount
+    return new NextResponse(pdfBuffer, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "X-Lesson-Plan-Title": encodeURIComponent(lessonPlan.plan.title),
+        "X-Lesson-Plan-Word-Count": String(lessonPlan.wordCount)
+      }
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        {
-          error: error.issues[0]?.message ?? "Invalid lesson plan request."
-        },
-        { status: 400 }
-      );
-    }
-
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Unable to generate the lesson plan."

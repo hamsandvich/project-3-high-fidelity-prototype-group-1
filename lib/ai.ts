@@ -68,9 +68,7 @@ const lessonPlanSchema = z.object({
     support: z.array(z.string().trim().min(1)).min(2).max(4),
     extension: z.array(z.string().trim().min(1)).min(2).max(4)
   }),
-  homeConnection: z.string().trim().min(1),
-  emailSubject: z.string().trim().min(1),
-  emailPreview: z.string().trim().min(1)
+  homeConnection: z.string().trim().min(1)
 });
 
 const flashcardDeckSchema = z.object({
