@@ -5,8 +5,24 @@ import { CategoryManager } from "@/components/admin/category-manager";
 import { getDashboardData } from "@/lib/queries";
 import type { CategoryOption } from "@/types";
 
+type RecentWordSummary = {
+  id: string;
+  lemma: string;
+  slug: string;
+  plainEnglish: string;
+  updatedAt: Date;
+};
+
+type ManagedCategory = CategoryOption & {
+  _count: {
+    words: number;
+  };
+};
+
 export default async function AdminDashboardPage() {
   const data = await getDashboardData();
+  const recentWords = data.recentWords as RecentWordSummary[];
+  const categories = data.categories as ManagedCategory[];
 
   const stats = [
     { label: "Words", value: data.wordCount, icon: Database },
@@ -70,7 +86,7 @@ export default async function AdminDashboardPage() {
       <section className="surface-card p-5">
         <p className="section-label">Recently updated</p>
         <div className="mt-4 space-y-3">
-          {data.recentWords.map((word) => (
+          {recentWords.map((word) => (
             <Link key={word.id} href={`/admin/words/${word.id}/edit`} className="surface-muted block p-4">
               <p className="font-semibold text-slate-900">{word.lemma}</p>
               <p className="mt-1 text-sm text-slate-600">{word.plainEnglish}</p>
@@ -80,7 +96,7 @@ export default async function AdminDashboardPage() {
       </section>
 
       <CategoryManager
-        initialCategories={data.categories as Array<CategoryOption & { _count: { words: number } }>}
+        initialCategories={categories}
       />
     </div>
   );
