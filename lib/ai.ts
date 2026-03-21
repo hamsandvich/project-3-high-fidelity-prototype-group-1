@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { Prisma } from "@/generated/prisma/client";
 import { generateStructuredObject, isOpenAIConfigured } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 import { uniqueBy } from "@/lib/utils";
@@ -14,7 +15,6 @@ const AI_RELATION_TYPE_VALUES = [
   "variant",
   "similar"
 ] as const;
-const AI_RELATION_TYPE_SET = new Set<string>(AI_RELATION_TYPE_VALUES);
 const SYMMETRIC_RELATION_TYPES = new Set(["synonym", "antonym", "associated", "variant", "similar"]);
 const ENRICHMENT_BATCH_SIZE = 10;
 
@@ -147,14 +147,83 @@ export type SearchQuestionContextWord = {
   }>;
 };
 
-function chunkItems<T>(items: T[], size: number) {
-  const chunks: T[][] = [];
+type CatalogWordSuggestion = z.infer<typeof catalogWordSuggestionSchema>;
 
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
+const aiCatalogSummaryWordSelect = {
+  id: true,
+  lemma: true,
+  syllabics: true,
+  plainEnglish: true,
+  partOfSpeech: true,
+  linguisticClass: true,
+  meanings: {
+    orderBy: [{ sortOrder: "asc" }],
+    select: {
+      gloss: true
+    }
+  },
+  categories: {
+    orderBy: [{ sortOrder: "asc" }],
+    select: {
+      category: {
+        select: {
+          slug: true
+        }
+      }
+    }
   }
+} satisfies Prisma.WordSelect;
 
-  return chunks;
+const aiFocusWordSelect = {
+  id: true,
+  lemma: true,
+  syllabics: true,
+  plainEnglish: true,
+  partOfSpeech: true,
+  linguisticClass: true,
+  rootStem: true,
+  beginnerExplanation: true,
+  expertExplanation: true,
+  meanings: {
+    orderBy: [{ sortOrder: "asc" }],
+    select: {
+      gloss: true,
+      description: true
+    }
+  },
+  categories: {
+    orderBy: [{ sortOrder: "asc" }],
+    select: {
+      category: {
+        select: {
+          id: true,
+          name: true,
+          slug: true
+        }
+      }
+    }
+  }
+} satisfies Prisma.WordSelect;
+
+type AiCatalogSummaryWord = Prisma.WordGetPayload<{
+  select: typeof aiCatalogSummaryWordSelect;
+}>;
+
+type AiFocusWord = Prisma.WordGetPayload<{
+  select: typeof aiFocusWordSelect;
+}>;
+
+function buildCatalogSummary(words: AiCatalogSummaryWord[]) {
+  return words.map((word) => ({
+    id: word.id,
+    lemma: word.lemma,
+    syllabics: word.syllabics,
+    plainEnglish: word.plainEnglish,
+    partOfSpeech: word.partOfSpeech,
+    linguisticClass: word.linguisticClass,
+    categories: word.categories.map((entry) => entry.category.slug),
+    meanings: word.meanings.map((meaning) => meaning.gloss)
+  }));
 }
 
 function normalizeGeneratedExplanation(value?: string | null) {
@@ -208,199 +277,19 @@ function buildFallbackFlashcardDeck(
   };
 }
 
-export async function enrichVocabularyCatalogWithAI(options: {
-  onProgress?: (event: CatalogEnrichmentProgressEvent) => Promise<void> | void;
-} = {}): Promise<CatalogEnrichmentResult> {
-  const [categories, words, existingRelations] = await Promise.all([
-    prisma.category.findMany({
-      orderBy: [{ name: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true
-      }
-    }),
-    prisma.word.findMany({
-      orderBy: [{ lemma: "asc" }],
-      select: {
-        id: true,
-        lemma: true,
-        syllabics: true,
-        plainEnglish: true,
-        partOfSpeech: true,
-        linguisticClass: true,
-        rootStem: true,
-        beginnerExplanation: true,
-        expertExplanation: true,
-        meanings: {
-          orderBy: [{ sortOrder: "asc" }],
-          select: {
-            gloss: true,
-            description: true
-          }
-        },
-        categories: {
-          orderBy: [{ sortOrder: "asc" }],
-          select: {
-            category: {
-              select: {
-                id: true,
-                name: true,
-                slug: true
-              }
-            }
-          }
-        }
-      }
-    }),
-    prisma.relation.findMany({
-      select: {
-        fromWordId: true,
-        toWordId: true,
-        relationType: true
-      }
-    })
-  ]);
-
-  if (!isOpenAIConfigured()) {
-    return {
-      skipped: true,
-      processedWords: words.length,
-      addedCategoryAssignments: 0,
-      addedRelations: 0,
-      addedBeginnerExplanations: 0,
-      addedExpertExplanations: 0,
-      warning: "AI enrichment skipped because OPENAI_API_KEY is not set."
-    };
-  }
-
-  if (words.length === 0) {
-    return {
-      skipped: false,
-      processedWords: 0,
-      addedCategoryAssignments: 0,
-      addedRelations: 0,
-      addedBeginnerExplanations: 0,
-      addedExpertExplanations: 0
-    };
-  }
-
-  const catalogSummary = words.map((word) => ({
-    id: word.id,
-    lemma: word.lemma,
-    syllabics: word.syllabics,
-    plainEnglish: word.plainEnglish,
-    partOfSpeech: word.partOfSpeech,
-    linguisticClass: word.linguisticClass,
-    categories: word.categories.map((entry) => entry.category.slug),
-    meanings: word.meanings.map((meaning) => meaning.gloss)
-  }));
-
-  const suggestions: z.infer<typeof catalogWordSuggestionSchema>[] = [];
-  const enrichmentBatches = chunkItems(words, ENRICHMENT_BATCH_SIZE);
-
-  if (enrichmentBatches.length > 0) {
-    await options.onProgress?.({
-      completed: 0,
-      total: enrichmentBatches.length,
-      status: `Preparing AI enrichment for ${words.length} word${words.length === 1 ? "" : "s"}.`
-    });
-  }
-
-  for (const [batchIndex, batch] of enrichmentBatches.entries()) {
-    await options.onProgress?.({
-      completed: batchIndex,
-      total: enrichmentBatches.length,
-      status: `Running AI enrichment batch ${batchIndex + 1} of ${enrichmentBatches.length}.`
-    });
-
-    const parsed = await generateStructuredObject({
-      task: "catalogEnrichment",
-      schema: catalogEnrichmentSchema,
-      schemaName: "vocabulary_catalog_enrichment",
-      reasoningEffort: "low",
-      instructions: [
-        "You are enriching a Plains Cree vocabulary database used for education.",
-        "For each focus word, choose up to 3 matching category slugs from the provided category list.",
-        "Only use category slugs that already exist in the input.",
-        "Then suggest up to 5 high-confidence relations from the focus word to other words already in the catalog.",
-        "Use only these relation types: synonym, antonym, broader, narrower, associated, variant, similar.",
-        "When you choose broader, the target word must be a broader term than the source word.",
-        "When you choose narrower, the target word must be a narrower term than the source word.",
-        'If needsBeginnerExplanation is true, write a learner-friendly beginnerExplanation in plain English using 1-2 short sentences.',
-        'If needsExpertExplanation is true, write an expertExplanation using the linguistic or semantic context available in 1-3 concise sentences.',
-        "If either explanation is not needed, return an empty string for that field.",
-        "Do not invent grammar details, morphology, or cultural claims that are not supported by the provided context.",
-        "Do not invent new words, new categories, or low-confidence links.",
-        "Theme membership is handled through categories, so do not use categoryMember relations."
-      ].join("\n"),
-      input: JSON.stringify(
-        {
-          categories,
-          catalogWords: catalogSummary,
-          focusWords: batch.map((word) => ({
-            id: word.id,
-            lemma: word.lemma,
-            syllabics: word.syllabics,
-            plainEnglish: word.plainEnglish,
-            partOfSpeech: word.partOfSpeech,
-            linguisticClass: word.linguisticClass,
-            rootStem: word.rootStem,
-            needsBeginnerExplanation: !word.beginnerExplanation?.trim(),
-            needsExpertExplanation: !word.expertExplanation?.trim(),
-            beginnerExplanation: word.beginnerExplanation,
-            expertExplanation: word.expertExplanation,
-            meanings: word.meanings,
-            categories: word.categories.map((entry) => entry.category.slug)
-          }))
-        },
-        null,
-        2
-      )
-    });
-
-    suggestions.push(
-      ...(parsed.words ?? []).map((word) => ({
-        wordId: word.wordId,
-        categorySlugs: word.categorySlugs ?? [],
-        beginnerExplanation: word.beginnerExplanation ?? "",
-        expertExplanation: word.expertExplanation ?? "",
-        relations: (word.relations ?? []).map((relation) => ({
-          targetWordId: relation.targetWordId,
-          relationType: relation.relationType,
-          rationale: relation.rationale ?? ""
-        }))
-      }))
-    );
-  }
-
-  if (enrichmentBatches.length > 0) {
-    await options.onProgress?.({
-      completed: enrichmentBatches.length,
-      total: enrichmentBatches.length,
-      status: `Finished AI analysis for ${words.length} word${words.length === 1 ? "" : "s"}.`
-    });
-  }
-
-  const categoryBySlug = new Map(categories.map((category) => [category.slug, category]));
-  const wordById = new Map(words.map((word) => [word.id, word]));
+async function applyCatalogEnrichmentSuggestions(params: {
+  batchWords: AiFocusWord[];
+  suggestions: CatalogWordSuggestion[];
+  categoryBySlug: Map<string, { id: string; slug: string }>;
+  catalogWordIdSet: Set<string>;
+  seenRelationKeys: Set<string>;
+}) {
+  const { batchWords, suggestions, categoryBySlug, catalogWordIdSet, seenRelationKeys } = params;
+  const wordById = new Map(batchWords.map((word) => [word.id, word]));
   const existingCategoryKeys = new Set(
-    words.flatMap((word) => word.categories.map((entry) => `${word.id}:${entry.category.id}`))
+    batchWords.flatMap((word) => word.categories.map((entry) => `${word.id}:${entry.category.id}`))
   );
-  const nextCategorySortOrderByWordId = new Map(words.map((word) => [word.id, word.categories.length]));
-  const seenRelationKeys = new Set(
-    existingRelations
-      .filter((relation) => AI_RELATION_TYPE_SET.has(relation.relationType))
-      .map((relation) =>
-        buildRelationEquivalenceKey(
-          relation.fromWordId,
-          relation.toWordId,
-          relation.relationType as (typeof AI_RELATION_TYPE_VALUES)[number]
-        )
-      )
-  );
-
+  const nextCategorySortOrderByWordId = new Map(batchWords.map((word) => [word.id, word.categories.length]));
   const categoryAssignments: Array<{ wordId: string; categoryId: string; sortOrder: number }> = [];
   const explanationUpdates = new Map<
     string,
@@ -470,13 +359,11 @@ export async function enrichVocabularyCatalogWithAI(options: {
       (suggestion.relations ?? []).filter((item) => item.targetWordId !== sourceWord.id),
       (item) => `${item.targetWordId}:${item.relationType}`
     )) {
-      const targetWord = wordById.get(relation.targetWordId);
-
-      if (!targetWord) {
+      if (!catalogWordIdSet.has(relation.targetWordId)) {
         continue;
       }
 
-      const relationKey = buildRelationEquivalenceKey(sourceWord.id, targetWord.id, relation.relationType);
+      const relationKey = buildRelationEquivalenceKey(sourceWord.id, relation.targetWordId, relation.relationType);
 
       if (seenRelationKeys.has(relationKey)) {
         continue;
@@ -484,7 +371,7 @@ export async function enrichVocabularyCatalogWithAI(options: {
 
       relationRows.push({
         fromWordId: sourceWord.id,
-        toWordId: targetWord.id,
+        toWordId: relation.targetWordId,
         relationType: relation.relationType,
         isBidirectional: true
       });
@@ -530,8 +417,206 @@ export async function enrichVocabularyCatalogWithAI(options: {
   }
 
   return {
+    addedCategoryAssignments,
+    addedRelations,
+    addedBeginnerExplanations,
+    addedExpertExplanations
+  };
+}
+
+export async function enrichVocabularyCatalogWithAI(options: {
+  onProgress?: (event: CatalogEnrichmentProgressEvent) => Promise<void> | void;
+} = {}): Promise<CatalogEnrichmentResult> {
+  const totalWords = await prisma.word.count();
+
+  if (!isOpenAIConfigured()) {
+    return {
+      skipped: true,
+      processedWords: totalWords,
+      addedCategoryAssignments: 0,
+      addedRelations: 0,
+      addedBeginnerExplanations: 0,
+      addedExpertExplanations: 0,
+      warning: "AI enrichment skipped because OPENAI_API_KEY is not set."
+    };
+  }
+
+  if (totalWords === 0) {
+    return {
+      skipped: false,
+      processedWords: 0,
+      addedCategoryAssignments: 0,
+      addedRelations: 0,
+      addedBeginnerExplanations: 0,
+      addedExpertExplanations: 0
+    };
+  }
+
+  const [categories, catalogSummaryWords, existingRelations] = await Promise.all([
+    prisma.category.findMany({
+      orderBy: [{ name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true
+      }
+    }),
+    prisma.word.findMany({
+      orderBy: [{ lemma: "asc" }],
+      select: aiCatalogSummaryWordSelect
+    }),
+    prisma.relation.findMany({
+      where: {
+        relationType: {
+          in: [...AI_RELATION_TYPE_VALUES]
+        }
+      },
+      select: {
+        fromWordId: true,
+        toWordId: true,
+        relationType: true
+      }
+    })
+  ]);
+
+  const catalogSummary = buildCatalogSummary(catalogSummaryWords);
+  const catalogWordIdSet = new Set(catalogSummary.map((word) => word.id));
+  const categoryBySlug = new Map(categories.map((category) => [category.slug, { id: category.id, slug: category.slug }]));
+  const seenRelationKeys = new Set(
+    existingRelations.map((relation) =>
+      buildRelationEquivalenceKey(
+        relation.fromWordId,
+        relation.toWordId,
+        relation.relationType as (typeof AI_RELATION_TYPE_VALUES)[number]
+      )
+    )
+  );
+  const totalBatches = Math.ceil(totalWords / ENRICHMENT_BATCH_SIZE);
+
+  if (totalBatches > 0) {
+    await options.onProgress?.({
+      completed: 0,
+      total: totalBatches,
+      status: `Preparing AI enrichment for ${totalWords} word${totalWords === 1 ? "" : "s"}.`
+    });
+  }
+
+  let addedCategoryAssignments = 0;
+  let addedRelations = 0;
+  let addedBeginnerExplanations = 0;
+  let addedExpertExplanations = 0;
+  let processedWords = 0;
+  let completedBatches = 0;
+  let cursor: string | undefined;
+
+  while (processedWords < totalWords) {
+    const batch = await prisma.word.findMany({
+      orderBy: [{ id: "asc" }],
+      take: ENRICHMENT_BATCH_SIZE,
+      ...(cursor
+        ? {
+            cursor: { id: cursor },
+            skip: 1
+          }
+        : {}),
+      select: aiFocusWordSelect
+    });
+
+    if (batch.length === 0) {
+      break;
+    }
+
+    cursor = batch.at(-1)?.id;
+
+    await options.onProgress?.({
+      completed: completedBatches,
+      total: totalBatches,
+      status: `Running AI enrichment batch ${completedBatches + 1} of ${totalBatches}.`
+    });
+
+    const parsed = await generateStructuredObject({
+      task: "catalogEnrichment",
+      schema: catalogEnrichmentSchema,
+      schemaName: "vocabulary_catalog_enrichment",
+      reasoningEffort: "low",
+      instructions: [
+        "You are enriching a Plains Cree vocabulary database used for education.",
+        "For each focus word, choose up to 3 matching category slugs from the provided category list.",
+        "Only use category slugs that already exist in the input.",
+        "Then suggest up to 5 high-confidence relations from the focus word to other words already in the catalog.",
+        "Use only these relation types: synonym, antonym, broader, narrower, associated, variant, similar.",
+        "When you choose broader, the target word must be a broader term than the source word.",
+        "When you choose narrower, the target word must be a narrower term than the source word.",
+        'If needsBeginnerExplanation is true, write a learner-friendly beginnerExplanation in plain English using 1-2 short sentences.',
+        'If needsExpertExplanation is true, write an expertExplanation using the linguistic or semantic context available in 1-3 concise sentences.',
+        "If either explanation is not needed, return an empty string for that field.",
+        "Do not invent grammar details, morphology, or cultural claims that are not supported by the provided context.",
+        "Do not invent new words, new categories, or low-confidence links.",
+        "Theme membership is handled through categories, so do not use categoryMember relations."
+      ].join("\n"),
+      input: JSON.stringify(
+        {
+          categories,
+          catalogWords: catalogSummary,
+          focusWords: batch.map((word) => ({
+            id: word.id,
+            lemma: word.lemma,
+            syllabics: word.syllabics,
+            plainEnglish: word.plainEnglish,
+            partOfSpeech: word.partOfSpeech,
+            linguisticClass: word.linguisticClass,
+            rootStem: word.rootStem,
+            needsBeginnerExplanation: !word.beginnerExplanation?.trim(),
+            needsExpertExplanation: !word.expertExplanation?.trim(),
+            beginnerExplanation: word.beginnerExplanation,
+            expertExplanation: word.expertExplanation,
+            meanings: word.meanings,
+            categories: word.categories.map((entry) => entry.category.slug)
+          }))
+        },
+        null,
+        2
+      )
+    });
+
+    const applied = await applyCatalogEnrichmentSuggestions({
+      batchWords: batch,
+      suggestions: (parsed.words ?? []).map((word) => ({
+        wordId: word.wordId,
+        categorySlugs: word.categorySlugs ?? [],
+        beginnerExplanation: word.beginnerExplanation ?? "",
+        expertExplanation: word.expertExplanation ?? "",
+        relations: (word.relations ?? []).map((relation) => ({
+          targetWordId: relation.targetWordId,
+          relationType: relation.relationType,
+          rationale: relation.rationale ?? ""
+        }))
+      })),
+      categoryBySlug,
+      catalogWordIdSet,
+      seenRelationKeys
+    });
+
+    addedCategoryAssignments += applied.addedCategoryAssignments;
+    addedRelations += applied.addedRelations;
+    addedBeginnerExplanations += applied.addedBeginnerExplanations;
+    addedExpertExplanations += applied.addedExpertExplanations;
+    processedWords += batch.length;
+    completedBatches += 1;
+  }
+
+  if (totalBatches > 0) {
+    await options.onProgress?.({
+      completed: completedBatches,
+      total: totalBatches,
+      status: `Finished AI analysis for ${processedWords} word${processedWords === 1 ? "" : "s"}.`
+    });
+  }
+
+  return {
     skipped: false,
-    processedWords: words.length,
+    processedWords,
     addedCategoryAssignments,
     addedRelations,
     addedBeginnerExplanations,
