@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { generateStructuredObject, isOpenAIConfigured } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
-import { uniqueBy } from "@/lib/utils";
+import { slugify, uniqueBy } from "@/lib/utils";
 import type { ItwewinaMetadata } from "@/types";
 
 const AI_RELATION_TYPE_VALUES = [
@@ -17,6 +17,10 @@ const AI_RELATION_TYPE_VALUES = [
 ] as const;
 const SYMMETRIC_RELATION_TYPES = new Set(["synonym", "antonym", "associated", "variant", "similar"]);
 const ENRICHMENT_BATCH_SIZE = 10;
+const CATALOG_CONTEXT_WORD_LIMITS = [180, 120, 80, 50, 30] as const;
+const MAX_CATEGORY_DESCRIPTION_LENGTH = 120;
+const MAX_SUMMARY_MEANINGS = 3;
+const MAX_SUMMARY_CATEGORIES = 4;
 
 const catalogWordSuggestionSchema = z.object({
   wordId: z.string().trim().min(1),
@@ -152,7 +156,6 @@ type CatalogWordSuggestion = z.infer<typeof catalogWordSuggestionSchema>;
 const aiCatalogSummaryWordSelect = {
   id: true,
   lemma: true,
-  syllabics: true,
   plainEnglish: true,
   partOfSpeech: true,
   linguisticClass: true,
@@ -213,17 +216,267 @@ type AiFocusWord = Prisma.WordGetPayload<{
   select: typeof aiFocusWordSelect;
 }>;
 
-function buildCatalogSummary(words: AiCatalogSummaryWord[]) {
-  return words.map((word) => ({
-    id: word.id,
-    lemma: word.lemma,
-    syllabics: word.syllabics,
-    plainEnglish: word.plainEnglish,
-    partOfSpeech: word.partOfSpeech,
-    linguisticClass: word.linguisticClass,
-    categories: word.categories.map((entry) => entry.category.slug),
-    meanings: word.meanings.map((meaning) => meaning.gloss)
+type CatalogPromptCategory = {
+  slug: string;
+  name: string;
+  description?: string;
+};
+
+type CatalogPromptWord = {
+  id: string;
+  lemma: string;
+  plainEnglish: string;
+  partOfSpeech: string;
+  linguisticClass?: string | null;
+  categories: string[];
+  meanings: string[];
+};
+
+type PreparedCatalogPromptWord = CatalogPromptWord & {
+  searchTokens: string[];
+};
+
+function tokenizeCatalogText(...values: Array<string | null | undefined>) {
+  return uniqueBy(
+    values.flatMap((value) =>
+      slugify(value ?? "")
+        .split("-")
+        .map((token) => token.trim())
+        .filter((token) => token.length > 1)
+    ),
+    (token) => token
+  );
+}
+
+function truncateText(value: string | null | undefined, maxLength: number) {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function buildCategoryPromptContext(
+  categories: Array<{ slug: string; name: string; description: string | null }>
+): CatalogPromptCategory[] {
+  return categories.map((category) => ({
+    slug: category.slug,
+    name: category.name,
+    ...(truncateText(category.description, MAX_CATEGORY_DESCRIPTION_LENGTH)
+      ? { description: truncateText(category.description, MAX_CATEGORY_DESCRIPTION_LENGTH) }
+      : {})
   }));
+}
+
+function buildCatalogSummary(words: AiCatalogSummaryWord[]): PreparedCatalogPromptWord[] {
+  return words.map((word) => {
+    const categories = word.categories.map((entry) => entry.category.slug).slice(0, MAX_SUMMARY_CATEGORIES);
+    const meanings = uniqueBy(
+      word.meanings.map((meaning) => meaning.gloss.trim()).filter(Boolean),
+      (meaning) => meaning.toLowerCase()
+    ).slice(0, MAX_SUMMARY_MEANINGS);
+
+    return {
+      id: word.id,
+      lemma: word.lemma,
+      plainEnglish: word.plainEnglish,
+      partOfSpeech: word.partOfSpeech,
+      linguisticClass: word.linguisticClass,
+      categories,
+      meanings,
+      searchTokens: tokenizeCatalogText(
+        word.lemma,
+        word.plainEnglish,
+        word.partOfSpeech,
+        word.linguisticClass,
+        ...categories,
+        ...meanings
+      )
+    };
+  });
+}
+
+function buildFocusWordTokens(word: AiFocusWord) {
+  return tokenizeCatalogText(
+    word.lemma,
+    word.plainEnglish,
+    word.partOfSpeech,
+    word.linguisticClass,
+    word.rootStem,
+    ...word.categories.map((entry) => entry.category.slug),
+    ...word.meanings.map((meaning) => meaning.gloss)
+  );
+}
+
+function selectCatalogContextWords(
+  catalogSummary: PreparedCatalogPromptWord[],
+  batch: AiFocusWord[],
+  limit: number
+): CatalogPromptWord[] {
+  if (catalogSummary.length <= limit) {
+    return catalogSummary.map(({ searchTokens, ...word }) => word);
+  }
+
+  const focusIds = new Set(batch.map((word) => word.id));
+  const focusCategorySlugs = new Set(batch.flatMap((word) => word.categories.map((entry) => entry.category.slug)));
+  const focusPartsOfSpeech = new Set(batch.map((word) => word.partOfSpeech.toLowerCase()));
+  const focusLinguisticClasses = new Set(
+    batch.map((word) => word.linguisticClass?.trim().toLowerCase()).filter((value): value is string => Boolean(value))
+  );
+  const focusTokens = new Set(batch.flatMap((word) => buildFocusWordTokens(word)));
+  const selectedWords: PreparedCatalogPromptWord[] = [];
+  const selectedIds = new Set<string>();
+
+  for (const word of catalogSummary) {
+    if (focusIds.has(word.id)) {
+      selectedWords.push(word);
+      selectedIds.add(word.id);
+    }
+  }
+
+  const rankedWords = [...catalogSummary]
+    .map((word) => {
+      let score = focusIds.has(word.id) ? 1_000 : 0;
+      let sharedTokenCount = 0;
+
+      for (const token of word.searchTokens) {
+        if (focusTokens.has(token)) {
+          sharedTokenCount += 1;
+        }
+      }
+
+      score += Math.min(sharedTokenCount, 8) * 4;
+
+      if (word.categories.some((slug) => focusCategorySlugs.has(slug))) {
+        score += 8;
+      }
+
+      if (focusPartsOfSpeech.has(word.partOfSpeech.toLowerCase())) {
+        score += 2;
+      }
+
+      if (word.linguisticClass && focusLinguisticClasses.has(word.linguisticClass.toLowerCase())) {
+        score += 2;
+      }
+
+      return {
+        word,
+        score
+      };
+    })
+    .sort((left, right) => right.score - left.score || left.word.lemma.localeCompare(right.word.lemma));
+
+  for (const candidate of rankedWords) {
+    if (selectedWords.length >= limit) {
+      break;
+    }
+
+    if (selectedIds.has(candidate.word.id)) {
+      continue;
+    }
+
+    selectedWords.push(candidate.word);
+    selectedIds.add(candidate.word.id);
+  }
+
+  return selectedWords.slice(0, limit).map(({ searchTokens, ...word }) => word);
+}
+
+function buildCatalogContextWordLimits(totalCatalogWords: number) {
+  return uniqueBy(
+    CATALOG_CONTEXT_WORD_LIMITS.map((limit) => Math.min(totalCatalogWords, limit)).filter((limit) => limit > 0),
+    (limit) => String(limit)
+  );
+}
+
+function isContextWindowError(error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : typeof error === "object" && error && "message" in error && typeof error.message === "string"
+          ? error.message
+          : "";
+
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("context window") ||
+    normalized.includes("maximum context length") ||
+    normalized.includes("too many tokens") ||
+    normalized.includes("input exceeds")
+  );
+}
+
+async function generateCatalogEnrichmentForBatch(params: {
+  categories: CatalogPromptCategory[];
+  catalogSummary: PreparedCatalogPromptWord[];
+  batch: AiFocusWord[];
+}) {
+  const { categories, catalogSummary, batch } = params;
+  const contextWordLimits = buildCatalogContextWordLimits(catalogSummary.length);
+
+  for (const contextWordLimit of contextWordLimits) {
+    try {
+      return await generateStructuredObject({
+        task: "catalogEnrichment",
+        schema: catalogEnrichmentSchema,
+        schemaName: "vocabulary_catalog_enrichment",
+        reasoningEffort: "low",
+        instructions: [
+          "You are enriching a Plains Cree vocabulary database used for education.",
+          "For each focus word, choose up to 3 matching category slugs from the provided category list.",
+          "Only use category slugs that already exist in the input.",
+          "Then suggest up to 5 high-confidence relations from the focus word to other words already in the catalog.",
+          "Use only these relation types: synonym, antonym, broader, narrower, associated, variant, similar.",
+          "When you choose broader, the target word must be a broader term than the source word.",
+          "When you choose narrower, the target word must be a narrower term than the source word.",
+          'If needsBeginnerExplanation is true, write a learner-friendly beginnerExplanation in plain English using 1-2 short sentences.',
+          'If needsExpertExplanation is true, write an expertExplanation using the linguistic or semantic context available in 1-3 concise sentences.',
+          "If either explanation is not needed, return an empty string for that field.",
+          "Do not invent grammar details, morphology, or cultural claims that are not supported by the provided context.",
+          "Do not invent new words, new categories, or low-confidence links.",
+          "Theme membership is handled through categories, so do not use categoryMember relations."
+        ].join("\n"),
+        input: JSON.stringify(
+          {
+            categories,
+            catalogWords: selectCatalogContextWords(catalogSummary, batch, contextWordLimit),
+            focusWords: batch.map((word) => ({
+              id: word.id,
+              lemma: word.lemma,
+              syllabics: word.syllabics,
+              plainEnglish: word.plainEnglish,
+              partOfSpeech: word.partOfSpeech,
+              linguisticClass: word.linguisticClass,
+              rootStem: word.rootStem,
+              needsBeginnerExplanation: !word.beginnerExplanation?.trim(),
+              needsExpertExplanation: !word.expertExplanation?.trim(),
+              beginnerExplanation: word.beginnerExplanation,
+              expertExplanation: word.expertExplanation,
+              meanings: word.meanings,
+              categories: word.categories.map((entry) => entry.category.slug)
+            }))
+          },
+          null,
+          2
+        )
+      });
+    } catch (error) {
+      if (!isContextWindowError(error) || contextWordLimit === contextWordLimits.at(-1)) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Unable to fit AI enrichment input into the model context window.");
 }
 
 function normalizeGeneratedExplanation(value?: string | null) {
@@ -480,6 +733,7 @@ export async function enrichVocabularyCatalogWithAI(options: {
     })
   ]);
 
+  const categoryPromptContext = buildCategoryPromptContext(categories);
   const catalogSummary = buildCatalogSummary(catalogSummaryWords);
   const catalogWordIdSet = new Set(catalogSummary.map((word) => word.id));
   const categoryBySlug = new Map(categories.map((category) => [category.slug, { id: category.id, slug: category.slug }]));
@@ -535,49 +789,10 @@ export async function enrichVocabularyCatalogWithAI(options: {
       status: `Running AI enrichment batch ${completedBatches + 1} of ${totalBatches}.`
     });
 
-    const parsed = await generateStructuredObject({
-      task: "catalogEnrichment",
-      schema: catalogEnrichmentSchema,
-      schemaName: "vocabulary_catalog_enrichment",
-      reasoningEffort: "low",
-      instructions: [
-        "You are enriching a Plains Cree vocabulary database used for education.",
-        "For each focus word, choose up to 3 matching category slugs from the provided category list.",
-        "Only use category slugs that already exist in the input.",
-        "Then suggest up to 5 high-confidence relations from the focus word to other words already in the catalog.",
-        "Use only these relation types: synonym, antonym, broader, narrower, associated, variant, similar.",
-        "When you choose broader, the target word must be a broader term than the source word.",
-        "When you choose narrower, the target word must be a narrower term than the source word.",
-        'If needsBeginnerExplanation is true, write a learner-friendly beginnerExplanation in plain English using 1-2 short sentences.',
-        'If needsExpertExplanation is true, write an expertExplanation using the linguistic or semantic context available in 1-3 concise sentences.',
-        "If either explanation is not needed, return an empty string for that field.",
-        "Do not invent grammar details, morphology, or cultural claims that are not supported by the provided context.",
-        "Do not invent new words, new categories, or low-confidence links.",
-        "Theme membership is handled through categories, so do not use categoryMember relations."
-      ].join("\n"),
-      input: JSON.stringify(
-        {
-          categories,
-          catalogWords: catalogSummary,
-          focusWords: batch.map((word) => ({
-            id: word.id,
-            lemma: word.lemma,
-            syllabics: word.syllabics,
-            plainEnglish: word.plainEnglish,
-            partOfSpeech: word.partOfSpeech,
-            linguisticClass: word.linguisticClass,
-            rootStem: word.rootStem,
-            needsBeginnerExplanation: !word.beginnerExplanation?.trim(),
-            needsExpertExplanation: !word.expertExplanation?.trim(),
-            beginnerExplanation: word.beginnerExplanation,
-            expertExplanation: word.expertExplanation,
-            meanings: word.meanings,
-            categories: word.categories.map((entry) => entry.category.slug)
-          }))
-        },
-        null,
-        2
-      )
+    const parsed = await generateCatalogEnrichmentForBatch({
+      categories: categoryPromptContext,
+      catalogSummary,
+      batch
     });
 
     const applied = await applyCatalogEnrichmentSuggestions({
