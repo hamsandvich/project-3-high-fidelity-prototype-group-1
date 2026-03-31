@@ -3,7 +3,7 @@ import { unstable_noStore as noStore } from "next/cache";
 
 import { HOME_CATEGORY_SLUGS, RELATION_TYPE_VALUES } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
-import { buildWordSearchWhere } from "@/lib/search";
+import { buildExactWordSearchWhere, buildWordSearchWhere, rankWordSearchResults } from "@/lib/search";
 import { getInverseRelationType, uniqueBy } from "@/lib/utils";
 import { createEmptyWordPayload } from "@/lib/word-service";
 import type { ItwewinaMetadata } from "@/types";
@@ -33,6 +33,17 @@ const wordCardSelect = {
           colorToken: true
         }
       }
+    }
+  }
+} satisfies Prisma.WordSelect;
+
+const searchWordSelect = {
+  ...wordCardSelect,
+  notes: true,
+  meanings: {
+    orderBy: [{ sortOrder: "asc" }],
+    select: {
+      gloss: true
     }
   }
 } satisfies Prisma.WordSelect;
@@ -110,12 +121,21 @@ export async function searchWords(query: string) {
     return [];
   }
 
-  return prisma.word.findMany({
-    where: buildWordSearchWhere(normalized),
-    orderBy: [{ lemma: "asc" }],
-    select: wordCardSelect,
-    take: 50
-  });
+  const [exactMatches, broadMatches] = await Promise.all([
+    prisma.word.findMany({
+      where: buildExactWordSearchWhere(normalized),
+      select: searchWordSelect,
+      take: 50
+    }),
+    prisma.word.findMany({
+      where: buildWordSearchWhere(normalized),
+      orderBy: [{ lemma: "asc" }],
+      select: searchWordSelect,
+      take: 250
+    })
+  ]);
+
+  return rankWordSearchResults(uniqueBy([...exactMatches, ...broadMatches], (word) => word.id), normalized).slice(0, 50);
 }
 
 export async function getWordBySlug(slug: string) {

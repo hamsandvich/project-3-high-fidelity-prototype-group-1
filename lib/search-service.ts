@@ -6,7 +6,13 @@ import { importWords } from "@/lib/importers";
 import { buildItwewinaImportBatch } from "@/lib/itwewina";
 import { isOpenAIConfigured } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
-import { buildWordSearchWhere } from "@/lib/search";
+import {
+  buildExactWordSearchWhere,
+  buildWordSearchWhere,
+  rankWordSearchResults,
+  scoreWordSearchMatch,
+  type SearchRankableWord
+} from "@/lib/search";
 import { slugify, uniqueBy } from "@/lib/utils";
 import type { ItwewinaMetadata } from "@/types";
 import type { WordCardModel } from "@/types/view-models";
@@ -66,6 +72,9 @@ const QUESTION_STOPWORDS = new Set([
 ]);
 const QUESTION_MATCH_LIMIT = 5;
 const QUESTION_CONTEXT_LIMIT = 3;
+const LOOKUP_RESULT_LIMIT = 50;
+const LOOKUP_CANDIDATE_LIMIT = 250;
+const QUESTION_CANDIDATE_LIMIT = 50;
 
 const wordCardSelect = {
   id: true,
@@ -85,6 +94,17 @@ const wordCardSelect = {
           colorToken: true
         }
       }
+    }
+  }
+} satisfies Prisma.WordSelect;
+
+const searchResultWordSelect = {
+  ...wordCardSelect,
+  notes: true,
+  meanings: {
+    orderBy: [{ sortOrder: "asc" }],
+    select: {
+      gloss: true
     }
   }
 } satisfies Prisma.WordSelect;
@@ -124,7 +144,7 @@ const questionContextWordSelect = {
   }
 } satisfies Prisma.WordSelect;
 
-type SearchResultWord = Prisma.WordGetPayload<{ select: typeof wordCardSelect }>;
+type SearchResultWord = Prisma.WordGetPayload<{ select: typeof searchResultWordSelect }>;
 type QuestionContextWordRecord = Prisma.WordGetPayload<{ select: typeof questionContextWordSelect }>;
 
 export type SearchImportResult =
@@ -174,8 +194,38 @@ function mapWordToCard(word: SearchResultWord): WordCardModel {
   };
 }
 
-function normalizeText(value: string | null | undefined) {
-  return value?.trim().toLocaleLowerCase("en-CA") ?? "";
+async function findRankedWordMatches<TWord extends SearchRankableWord>(params: {
+  query: string;
+  limit: number;
+  fetchExact: () => Promise<TWord[]>;
+  fetchBroad: () => Promise<TWord[]>;
+}) {
+  const [exactMatches, broadMatches] = await Promise.all([params.fetchExact(), params.fetchBroad()]);
+
+  return rankWordSearchResults(
+    uniqueBy([...exactMatches, ...broadMatches], (word) => word.id),
+    params.query
+  ).slice(0, params.limit);
+}
+
+async function findLookupWords(query: string) {
+  return findRankedWordMatches({
+    query,
+    limit: LOOKUP_RESULT_LIMIT,
+    fetchExact: () =>
+      prisma.word.findMany({
+        where: buildExactWordSearchWhere(query),
+        select: searchResultWordSelect,
+        take: LOOKUP_RESULT_LIMIT
+      }),
+    fetchBroad: () =>
+      prisma.word.findMany({
+        where: buildWordSearchWhere(query),
+        orderBy: [{ lemma: "asc" }],
+        select: searchResultWordSelect,
+        take: LOOKUP_CANDIDATE_LIMIT
+      })
+  });
 }
 
 function looksLikeQuestion(query: string) {
@@ -259,40 +309,11 @@ function extractQuestionLookupTerms(query: string) {
 }
 
 function scoreQuestionWordMatch(word: QuestionContextWordRecord, term: string, termIndex: number) {
-  const normalizedTerm = normalizeText(term);
-  const normalizedSlug = slugify(term);
-  const lemma = normalizeText(word.lemma);
-  const syllabics = normalizeText(word.syllabics);
-  const plainEnglish = normalizeText(word.plainEnglish);
-  const meaningGlosses = word.meanings.map((meaning) => normalizeText(meaning.gloss));
-  let score = Math.max(0, 12 - termIndex);
-
-  if (!normalizedTerm) {
-    return score;
-  }
-
-  if (lemma === normalizedTerm || word.slug === normalizedSlug || syllabics === normalizedTerm) {
-    score += 80;
-  }
-
-  if (plainEnglish === normalizedTerm || meaningGlosses.includes(normalizedTerm)) {
-    score += 55;
-  }
-
-  if (lemma.includes(normalizedTerm) || word.slug.includes(normalizedSlug) || syllabics.includes(normalizedTerm)) {
-    score += 28;
-  }
-
-  if (plainEnglish.includes(normalizedTerm) || meaningGlosses.some((gloss) => gloss.includes(normalizedTerm))) {
-    score += 22;
-  }
-
-  if (/[^\u0000-\u007F]/.test(term) && (lemma.includes(normalizedTerm) || syllabics.includes(normalizedTerm))) {
-    score += 20;
-  }
+  let score = scoreWordSearchMatch(word, term);
+  score += Math.max(0, QUESTION_MATCH_LIMIT - termIndex) * 24;
 
   if (word.linguisticClass || word.rootStem || word.morphologyTables.length > 0) {
-    score += 4;
+    score += 24;
   }
 
   return score;
@@ -301,11 +322,22 @@ function scoreQuestionWordMatch(word: QuestionContextWordRecord, term: string, t
 async function findQuestionContextWords(terms: string[]) {
   const searches = await Promise.all(
     terms.map(async (term, termIndex) => {
-      const matches = await prisma.word.findMany({
-        where: buildWordSearchWhere(term),
-        orderBy: [{ lemma: "asc" }],
-        select: questionContextWordSelect,
-        take: QUESTION_MATCH_LIMIT
+      const matches = await findRankedWordMatches({
+        query: term,
+        limit: QUESTION_MATCH_LIMIT,
+        fetchExact: () =>
+          prisma.word.findMany({
+            where: buildExactWordSearchWhere(term),
+            select: questionContextWordSelect,
+            take: QUESTION_MATCH_LIMIT
+          }),
+        fetchBroad: () =>
+          prisma.word.findMany({
+            where: buildWordSearchWhere(term),
+            orderBy: [{ lemma: "asc" }],
+            select: questionContextWordSelect,
+            take: QUESTION_CANDIDATE_LIMIT
+          })
       });
 
       return matches.map((word) => ({
@@ -407,12 +439,7 @@ export async function getSearchExperience(query: string): Promise<SearchExperien
   }
 
   if (!looksLikeQuestion(normalized)) {
-    const results = await prisma.word.findMany({
-      where: buildWordSearchWhere(normalized),
-      orderBy: [{ lemma: "asc" }],
-      select: wordCardSelect,
-      take: 50
-    });
+    const results = await findLookupWords(normalized);
 
     return {
       mode: "lookup",
