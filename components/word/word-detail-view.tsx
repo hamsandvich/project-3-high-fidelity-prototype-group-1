@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, BookOpen, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Languages, Sparkles } from "lucide-react";
 
 import { SaveWordButton } from "@/components/word/save-word-button";
 import { PlayWordButton } from "@/components/word/play-word-button";
@@ -211,31 +211,24 @@ export function WordDetailView({ word }: WordDetailViewProps) {
               <>
                 <h2 className="text-3xl leading-tight text-slate-900">{word.lemma}</h2>
                 {preferences.showSyllabics && word.syllabics ? (
-                  <p className="mt-1 text-sm text-slate-500">{word.syllabics}</p>
+                  <p className="mt-2 text-sm text-slate-500">{word.syllabics}</p>
                 ) : null}
-                <p className="mt-2 text-base font-medium text-slate-700">{word.plainEnglish}</p>
+                <p className="mt-4 text-base font-medium text-slate-700">{word.plainEnglish}</p>
               </>
             ) : (
               <>
                 <p className="text-lg font-semibold text-slate-900">{word.plainEnglish}</p>
-                <h2 className="mt-2 text-3xl leading-tight text-slate-800">{word.lemma}</h2>
+                <h2 className="mt-4 text-3xl leading-tight text-slate-800">{word.lemma}</h2>
                 {preferences.showSyllabics && word.syllabics ? (
-                  <p className="mt-1 text-sm text-slate-500">{word.syllabics}</p>
+                  <p className="mt-2 text-sm text-slate-500">{word.syllabics}</p>
                 ) : null}
               </>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="chip">{word.partOfSpeech}</span>
-            {word.categories.map((entry) => (
-              <Link key={entry.category.id} href={`/category/${entry.category.slug}`} className="chip">
-                {entry.category.name}
-              </Link>
-            ))}
-          </div>
+          <span className="chip">{word.partOfSpeech}</span>
         </div>
 
-        <div className="mt-4 flex items-center gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           <SaveWordButton
             word={{
               id: word.id,
@@ -251,27 +244,20 @@ export function WordDetailView({ word }: WordDetailViewProps) {
             spokenText={word.pronunciation ?? word.lemma}
             audioUrl={word.audioUrl}
           />
-          <div className="ml-auto flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-0.5">
-            {(["novice", "expert"] as DetailMode[]).map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setMode(option)}
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                  mode === option
-                    ? "bg-moss-700 text-white shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                )}
-              >
-                {option === "novice" ? "Novice" : "Expert"}
-              </button>
-            ))}
-          </div>
         </div>
 
+        {word.categories.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {word.categories.map((entry) => (
+              <Link key={entry.category.id} href={`/category/${entry.category.slug}`} className="chip">
+                {entry.category.name}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+
         {mode === "expert" && (inflectionalClass || word.rootStem) ? (
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+          <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50/90 p-4">
             <div className="flex flex-wrap items-center gap-3 text-slate-900">
               {word.linguisticClass ? <span className="chip bg-white">{word.linguisticClass}</span> : null}
               {inflectionalClass?.emoji ? <span className="text-xl leading-none">{inflectionalClass.emoji}</span> : null}
@@ -285,6 +271,28 @@ export function WordDetailView({ word }: WordDetailViewProps) {
             {word.rootStem ? <p className="mt-2 text-xs text-slate-500">Stem: {word.rootStem}</p> : null}
           </div>
         ) : null}
+
+        <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50/80 p-3">
+          <div className="mb-3 flex items-center gap-2">
+            <Languages className="h-4 w-4 text-moss-700" />
+            <p className="text-sm font-semibold text-slate-800">Novice / Expert mode</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {(["novice", "expert"] as DetailMode[]).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setMode(option)}
+                className={cn(
+                  "tap-button text-sm",
+                  mode === option ? "bg-moss-700 text-white" : "bg-white text-slate-600"
+                )}
+              >
+                {option === "novice" ? "Novice" : "Expert"}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="surface-card overflow-hidden">
