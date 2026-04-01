@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PageFrame } from "@/components/navigation/page-frame";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WordCard } from "@/components/ui/word-card";
+import { hasCachedLessonPlan } from "@/lib/lesson-plan-cache";
 import { getCategoryBySlug } from "@/lib/queries";
 import type { WordCardModel } from "@/types/view-models";
 
@@ -21,6 +22,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     notFound();
   }
 
+  const lessonPlanAvailable = await hasCachedLessonPlan(category.slug);
+
   return (
     <PageFrame
       title={category.name}
@@ -29,7 +32,11 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     >
       {category.words.length ? (
         <div className="space-y-4">
-          <ThemeLessonGenerator categorySlug={category.slug} categoryName={category.name} />
+          <ThemeLessonGenerator
+            categorySlug={category.slug}
+            categoryName={category.name}
+            hasCachedLessonPlan={lessonPlanAvailable}
+          />
           {category.words.map((entry) => (
             <WordCard key={entry.word.id} word={entry.word as WordCardModel} />
           ))}

@@ -268,22 +268,6 @@ export function SemanticMap({
 
   return (
     <div className={cn(framed ? "surface-card p-4" : "space-y-4")}>
-      {/* Zoom controls */}
-      <div className="mb-2 flex items-center justify-end gap-1">
-        <button type="button" onClick={zoom.zoomOut} disabled={!zoom.isZoomed} className="tap-button-secondary h-8 w-8 !rounded-full !p-0 text-slate-500 disabled:opacity-30" aria-label="Zoom out">
-          <ZoomOut className="h-3.5 w-3.5" />
-        </button>
-        <button type="button" onClick={zoom.zoomIn} disabled={zoom.scale >= 3} className="tap-button-secondary h-8 w-8 !rounded-full !p-0 text-slate-500 disabled:opacity-30" aria-label="Zoom in">
-          <ZoomIn className="h-3.5 w-3.5" />
-        </button>
-        {zoom.isZoomed ? (
-          <button type="button" onClick={zoom.reset} className="tap-button-secondary h-8 !rounded-full !px-2.5 !py-0 text-xs text-slate-500" aria-label="Reset zoom">
-            <Minimize2 className="mr-1 h-3 w-3" />
-            Reset
-          </button>
-        ) : null}
-      </div>
-
       {/* Map */}
       <div
         ref={zoom.containerRef}
@@ -297,8 +281,8 @@ export function SemanticMap({
           className="absolute inset-0 origin-center transition-transform duration-200 ease-out"
           style={{ transform: `scale(${zoom.scale}) translate(${zoom.translate.x / zoom.scale}%, ${zoom.translate.y / zoom.scale}%)` }}
         >
-          {/* Lines */}
-          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
+          {/* Lines — z-10 keeps them behind node cards */}
+          <svg className="absolute inset-0 z-10 h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
             {nodes.map((node, i) => {
               const pos = positions[i];
               const color = RELATION_COLORS[node.relationType];
@@ -356,8 +340,24 @@ export function SemanticMap({
         </div>
       </div>
 
+      {/* Zoom controls */}
+      <div className="mt-2 flex items-center justify-center gap-1.5">
+        <button type="button" onClick={zoom.zoomOut} disabled={!zoom.isZoomed} className="tap-button-secondary h-8 w-8 !rounded-full !p-0 text-slate-500 disabled:opacity-30" aria-label="Zoom out">
+          <ZoomOut className="h-3.5 w-3.5" />
+        </button>
+        <button type="button" onClick={zoom.zoomIn} disabled={zoom.scale >= 3} className="tap-button-secondary h-8 w-8 !rounded-full !p-0 text-slate-500 disabled:opacity-30" aria-label="Zoom in">
+          <ZoomIn className="h-3.5 w-3.5" />
+        </button>
+        {zoom.isZoomed ? (
+          <button type="button" onClick={zoom.reset} className="tap-button-secondary h-8 !rounded-full !px-2.5 !py-0 text-xs text-slate-500" aria-label="Reset zoom">
+            <Minimize2 className="mr-1 h-3 w-3" />
+            Reset
+          </button>
+        ) : null}
+      </div>
+
       {!zoom.isZoomed ? (
-        <p className="mt-1.5 text-center text-[0.65rem] text-slate-400">Pinch to zoom · tap a word to explore</p>
+        <p className="mt-1 text-center text-[0.65rem] text-slate-400">Pinch to zoom · tap a word to explore</p>
       ) : null}
 
       {/* Legend */}
