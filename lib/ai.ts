@@ -241,6 +241,18 @@ type PreparedCatalogPromptWord = CatalogPromptWord & {
   searchTokens: string[];
 };
 
+function toCatalogPromptWord(word: PreparedCatalogPromptWord): CatalogPromptWord {
+  return {
+    id: word.id,
+    lemma: word.lemma,
+    plainEnglish: word.plainEnglish,
+    partOfSpeech: word.partOfSpeech,
+    linguisticClass: word.linguisticClass,
+    categories: word.categories,
+    meanings: word.meanings
+  };
+}
+
 function tokenizeCatalogText(...values: Array<string | null | undefined>) {
   return uniqueBy(
     values.flatMap((value) =>
@@ -325,7 +337,7 @@ function selectCatalogContextWords(
   limit: number
 ): CatalogPromptWord[] {
   if (catalogSummary.length <= limit) {
-    return catalogSummary.map(({ searchTokens, ...word }) => word);
+    return catalogSummary.map(toCatalogPromptWord);
   }
 
   const focusIds = new Set(batch.map((word) => word.id));
@@ -390,7 +402,7 @@ function selectCatalogContextWords(
     selectedIds.add(candidate.word.id);
   }
 
-  return selectedWords.slice(0, limit).map(({ searchTokens, ...word }) => word);
+  return selectedWords.slice(0, limit).map(toCatalogPromptWord);
 }
 
 function buildCatalogContextWordLimits(totalCatalogWords: number) {
