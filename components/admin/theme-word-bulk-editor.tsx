@@ -197,7 +197,7 @@ export function ThemeWordBulkEditor({ category, initialWords }: ThemeWordBulkEdi
                     placeholder="Optional syllabics"
                   />
                 </label>
-                <label className="space-y-2">
+                <label className="space-y-2 md:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Plain English</span>
                   <input
                     value={row.plainEnglish}
@@ -207,7 +207,7 @@ export function ThemeWordBulkEditor({ category, initialWords }: ThemeWordBulkEdi
                     placeholder="English gloss"
                   />
                 </label>
-                <label className="space-y-2 md:col-span-2">
+                <label className="space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Part of speech</span>
                   <input
                     value={row.partOfSpeech}
