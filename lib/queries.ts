@@ -255,13 +255,23 @@ export async function getDashboardData() {
   };
 }
 
-export async function getAdminWords(query?: string) {
+export async function getAdminWords(query?: string, categoryId?: string) {
   noStore();
 
   const normalized = query?.trim();
+  const normalizedCategoryId = categoryId?.trim();
 
   return prisma.word.findMany({
     where: {
+      ...(normalizedCategoryId
+        ? {
+            categories: {
+              some: {
+                categoryId: normalizedCategoryId
+              }
+            }
+          }
+        : {}),
       ...(normalized
         ? {
             OR: [

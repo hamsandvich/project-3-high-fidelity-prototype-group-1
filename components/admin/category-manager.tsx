@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -147,6 +148,9 @@ export function CategoryManager({ initialCategories }: CategoryManagerProps) {
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <span className="chip">{category._count?.words ?? 0} linked words</span>
               <div className="flex gap-2">
+                <Link href={`/admin/words?category=${category.id}`} className="tap-button-secondary">
+                  View words
+                </Link>
                 <button
                   type="button"
                   className="tap-button-secondary"

@@ -3,21 +3,23 @@
 import Link from "next/link";
 
 import { useAppState } from "@/components/providers/app-providers";
+import { cn } from "@/lib/utils";
 import type { RelatedWordModel, WordCardModel } from "@/types/view-models";
 
 type SemanticMapProps = {
   centerWord: WordCardModel;
   relatedWords: RelatedWordModel[];
+  framed?: boolean;
 };
 
-export function SemanticMap({ centerWord, relatedWords }: SemanticMapProps) {
+export function SemanticMap({ centerWord, relatedWords, framed = true }: SemanticMapProps) {
   const { preferences } = useAppState();
   const nodes = relatedWords.slice(0, 8);
   const radius = 37;
   const center = 50;
 
   return (
-    <div className="surface-card p-4">
+    <div className={cn(framed ? "surface-card p-4" : "space-y-4")}>
       <div className="relative aspect-square rounded-4xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/90">
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
           {nodes.map((node, index) => {
@@ -39,7 +41,7 @@ export function SemanticMap({ centerWord, relatedWords }: SemanticMapProps) {
           })}
         </svg>
 
-        <div className="absolute left-1/2 top-1/2 z-20 w-40 -translate-x-1/2 -translate-y-1/2 rounded-3xl bg-moss-700 px-4 py-3 text-center text-white shadow-card">
+        <div className="absolute left-1/2 top-1/2 z-20 w-[8.5rem] max-w-[56%] -translate-x-1/2 -translate-y-1/2 rounded-3xl bg-moss-700 px-4 py-3 text-center text-white shadow-card sm:w-40">
           <p className="text-[0.7rem] uppercase tracking-[0.24em] text-white/70">Selected word</p>
           <p className="mt-2 text-lg">{centerWord.lemma}</p>
           {preferences.showSyllabics && centerWord.syllabics ? (
@@ -57,7 +59,7 @@ export function SemanticMap({ centerWord, relatedWords }: SemanticMapProps) {
             <Link
               key={node.id}
               href={`/word/${node.word.slug}`}
-              className="absolute z-30 w-28 -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-slate-200 bg-white/95 px-3 py-2 text-center text-xs shadow-sm"
+              className="absolute z-30 w-24 -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-slate-200 bg-white/95 px-2.5 py-2 text-center text-xs shadow-sm transition hover:border-moss-200 hover:text-moss-900 sm:w-28"
               style={{
                 left: `${x}%`,
                 top: `${y}%`
@@ -69,7 +71,7 @@ export function SemanticMap({ centerWord, relatedWords }: SemanticMapProps) {
           );
         })}
       </div>
-      <div className="mt-4 space-y-2">
+      <div className={cn("space-y-2", framed ? "mt-4" : "")}>
         <p className="section-label">Connection legend</p>
         <div className="flex flex-wrap gap-2">
           {nodes.map((node) => (
