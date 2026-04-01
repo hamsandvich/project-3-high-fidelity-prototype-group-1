@@ -54,7 +54,7 @@ export function ThemeLessonGenerator({
     link.remove();
     window.URL.revokeObjectURL(downloadUrl);
 
-    setMessage(`Downloaded the cached ${categoryName} lesson plan PDF.`);
+    setMessage(`Downloaded the ${categoryName} lesson plan PDF.`);
   }
 
   function handleDownload() {
@@ -102,7 +102,7 @@ export function ThemeLessonGenerator({
     }, PROGRESS_INTERVAL_MS);
   }
 
-  const progressLabel = progress < 100 ? "Preparing cached PDF" : "Sending PDF to your device";
+  const progressLabel = progress < 100 ? "Preparing PDF" : "Sending PDF to your device";
 
   return (
     <section className="surface-card p-5">
@@ -114,9 +114,8 @@ export function ThemeLessonGenerator({
           <p className="section-label">Teacher tool</p>
           <h2 className="mt-2 text-xl text-slate-900">Download a lesson plan PDF</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Use the pre-generated lesson plan for the{" "}
-            <span className="font-semibold text-slate-800">{categoryName}</span> theme and save it directly to
-            this device.
+            Prepare the <span className="font-semibold text-slate-800">{categoryName}</span> lesson plan PDF
+            and save it directly to this device.
           </p>
         </div>
       </div>
@@ -148,12 +147,12 @@ export function ThemeLessonGenerator({
         ) : (
           <button type="button" onClick={() => void handleDownload()} className="tap-button-primary mt-4 w-full">
             <FileDown className="mr-2 h-4 w-4" />
-            Download cached PDF
+            Prepare and download PDF
           </button>
         )
       ) : (
         <div className="surface-muted mt-4 p-4 text-sm leading-6 text-slate-600">
-          A cached lesson plan is not available for this theme yet.
+          A lesson plan is not available for this theme yet.
         </div>
       )}
 

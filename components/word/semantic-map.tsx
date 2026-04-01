@@ -291,68 +291,78 @@ export function SemanticMap({
             })}
           </svg>
 
-          {/* Centre node */}
-          <motion.div
-            className="absolute z-20"
-            style={{ left: "50%", top: "50%", width: "26%", transform: "translate(-50%, -50%)" }}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring" as const, stiffness: 300, damping: 22, delay: 0.05 }}
+          {/* Centre node — wrapper positions, motion.div animates */}
+          <div
+            className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
+            style={{ left: "50%", top: "50%", width: "26%" }}
           >
-            <div className="rounded-2xl bg-moss-700 px-2 py-2.5 text-center text-white shadow-card">
-              <p className="truncate text-sm font-semibold leading-tight">{centerWord.lemma}</p>
-              {preferences.showSyllabics && centerWord.syllabics ? (
-                <p className="mt-0.5 truncate text-[0.6rem] text-white/70">{centerWord.syllabics}</p>
-              ) : null}
-              <p className="mt-0.5 line-clamp-2 text-[0.6rem] leading-snug text-white/80">{centerWord.plainEnglish}</p>
-            </div>
-          </motion.div>
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring" as const, stiffness: 300, damping: 22, delay: 0.05 }}
+            >
+              <div className="rounded-2xl bg-moss-700 px-2 py-2.5 text-center text-white shadow-card">
+                <p className="truncate text-sm font-semibold leading-tight">{centerWord.lemma}</p>
+                {preferences.showSyllabics && centerWord.syllabics ? (
+                  <p className="mt-0.5 truncate text-[0.6rem] text-white/70">{centerWord.syllabics}</p>
+                ) : null}
+                <p className="mt-0.5 line-clamp-2 text-[0.6rem] leading-snug text-white/80">{centerWord.plainEnglish}</p>
+              </div>
+            </motion.div>
+          </div>
 
-          {/* Peripheral nodes — sized in % so collision math matches */}
+          {/* Peripheral nodes */}
           {nodes.map((node, i) => {
             const pos = positions[i];
             const color = RELATION_COLORS[node.relationType];
             return (
-              <motion.div
+              <div
                 key={node.id}
-                className="absolute z-30"
-                style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: "22%", transform: "translate(-50%, -50%)" }}
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring" as const, stiffness: 260, damping: 20, delay: 0.18 + i * 0.08 }}
+                className="absolute z-30 -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: "22%" }}
               >
-                <Link
-                  href={`/word/${node.word.slug}`}
-                  className="block rounded-xl border border-slate-200/90 bg-white px-2 py-1.5 text-center shadow-sm transition-transform active:scale-95"
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring" as const, stiffness: 260, damping: 20, delay: 0.18 + i * 0.08 }}
                 >
-                  <div className="mb-0.5 flex items-center justify-center gap-1">
-                    <span className={cn("inline-block h-1.5 w-1.5 rounded-full shrink-0", color.dot)} />
-                    <span className={cn("truncate text-[0.5rem] font-medium uppercase tracking-wider leading-none", color.text)}>
-                      {node.relationType === "categoryMember" ? "category" : node.relationType}
-                    </span>
-                  </div>
-                  <p className="truncate text-[0.65rem] font-semibold leading-tight text-slate-900">{node.word.lemma}</p>
-                  <p className="mt-0.5 truncate text-[0.5rem] leading-tight text-slate-500">{node.word.plainEnglish}</p>
-                </Link>
-              </motion.div>
+                  <Link
+                    href={`/word/${node.word.slug}`}
+                    className="block rounded-xl border border-slate-200/90 bg-white px-2 py-1.5 text-center shadow-sm transition-transform active:scale-95"
+                  >
+                    <div className="mb-0.5 flex items-center justify-center gap-1">
+                      <span className={cn("inline-block h-1.5 w-1.5 rounded-full shrink-0", color.dot)} />
+                      <span className={cn("truncate text-[0.5rem] font-medium uppercase tracking-wider leading-none", color.text)}>
+                        {node.relationType === "categoryMember" ? "category" : node.relationType}
+                      </span>
+                    </div>
+                    <p className="truncate text-[0.65rem] font-semibold leading-tight text-slate-900">{node.word.lemma}</p>
+                    <p className="mt-0.5 truncate text-[0.5rem] leading-tight text-slate-500">{node.word.plainEnglish}</p>
+                  </Link>
+                </motion.div>
+              </div>
             );
           })}
         </div>
       </div>
 
       {/* Zoom controls */}
-      <div className="mt-2 flex items-center justify-center gap-1.5">
-        <button type="button" onClick={zoom.zoomOut} disabled={!zoom.isZoomed} className="tap-button-secondary h-8 w-8 !rounded-full !p-0 text-slate-500 disabled:opacity-30" aria-label="Zoom out">
-          <ZoomOut className="h-3.5 w-3.5" />
-        </button>
-        <button type="button" onClick={zoom.zoomIn} disabled={zoom.scale >= 3} className="tap-button-secondary h-8 w-8 !rounded-full !p-0 text-slate-500 disabled:opacity-30" aria-label="Zoom in">
-          <ZoomIn className="h-3.5 w-3.5" />
-        </button>
-        {zoom.isZoomed ? (
-          <button type="button" onClick={zoom.reset} className="tap-button-secondary h-8 !rounded-full !px-2.5 !py-0 text-xs text-slate-500" aria-label="Reset zoom">
-            <Minimize2 className="mr-1 h-3 w-3" />
-            Reset
+      <div className="mt-2 space-y-2">
+        <div className="flex items-center justify-center gap-2">
+          <button type="button" onClick={zoom.zoomOut} disabled={!zoom.isZoomed} className="tap-button-secondary h-8 w-8 !rounded-full !p-0 text-slate-500 disabled:opacity-30" aria-label="Zoom out">
+            <ZoomOut className="h-3.5 w-3.5" />
           </button>
+          <button type="button" onClick={zoom.zoomIn} disabled={zoom.scale >= 3} className="tap-button-secondary h-8 w-8 !rounded-full !p-0 text-slate-500 disabled:opacity-30" aria-label="Zoom in">
+            <ZoomIn className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        {zoom.isZoomed ? (
+          <div className="flex justify-center">
+            <button type="button" onClick={zoom.reset} className="tap-button-secondary h-8 !rounded-full !px-3 !py-0 text-xs text-slate-500" aria-label="Reset zoom">
+              <Minimize2 className="mr-1 h-3 w-3" />
+              Reset
+            </button>
+          </div>
         ) : null}
       </div>
 
