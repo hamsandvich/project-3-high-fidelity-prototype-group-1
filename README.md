@@ -211,6 +211,7 @@ This will start:
 1. Push this repository to GitHub, GitLab, or another Git source connected to Coolify.
 2. In Coolify, create a new project and add a new application from the repo.
 3. Choose Dockerfile-based deployment.
+   If the deployment logs mention `Nixpacks` or show repeated `COPY . /app` steps, the wrong builder is selected. Switch the application builder to Dockerfile before redeploying.
 4. Set the port to `3000`.
 5. Add or attach a PostgreSQL database service in Coolify.
 6. Set these environment variables in the app service:
