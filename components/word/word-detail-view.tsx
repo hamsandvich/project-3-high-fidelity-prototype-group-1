@@ -295,6 +295,31 @@ export function WordDetailView({ word }: WordDetailViewProps) {
         </div>
       </section>
 
+      <section className="surface-card overflow-hidden">
+        <div className="border-b border-slate-200/80 px-5 py-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-moss-700" />
+            <p className="text-base font-semibold text-slate-900">Word map</p>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Explore this word in context without leaving the detail page. Tap any connected word to open it.
+          </p>
+        </div>
+
+        <div className="px-5 py-4">
+          {word.relatedWords.length ? (
+            <SemanticMap centerWord={word} relatedWords={word.relatedWords} framed={false} />
+          ) : (
+            <div className="surface-muted p-4 text-center">
+              <p className="font-semibold text-slate-900">No related words yet</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                This word does not have connected entries yet, so the map will appear here once links are added.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
       <section className="surface-card p-5">
         <div className="flex items-center gap-2">
           <BookOpen className="h-4 w-4 text-moss-700" />
@@ -384,31 +409,6 @@ export function WordDetailView({ word }: WordDetailViewProps) {
               </div>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section className="surface-card overflow-hidden">
-        <div className="border-b border-slate-200/80 px-5 py-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-moss-700" />
-            <p className="text-base font-semibold text-slate-900">Word map</p>
-          </div>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Explore this word in context without leaving the detail page. Tap any connected word to open it.
-          </p>
-        </div>
-
-        <div className="px-5 py-4">
-          {word.relatedWords.length ? (
-            <SemanticMap centerWord={word} relatedWords={word.relatedWords} framed={false} />
-          ) : (
-            <div className="surface-muted p-4 text-center">
-              <p className="font-semibold text-slate-900">No related words yet</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                This word does not have connected entries yet, so the map will appear here once links are added.
-              </p>
-            </div>
-          )}
         </div>
       </section>
 
