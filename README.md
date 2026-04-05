@@ -1,5 +1,7 @@
 # Vocabulary Explorer
 
+CCID: omelchuk, mkkim1, tmyang, jingtao3, alu9,  mahughes
+
 Vocabulary Explorer is a mobile-first MVP prototype for the University of Alberta Language Technology Lab (ALTLab). It helps Plains Cree learners explore vocabulary by theme, meaning, and relation, while also giving expert users access to richer grammatical and morphological detail.
 
 The project is built with:
@@ -278,16 +280,15 @@ An example JSON payload is prefilled on `/admin/import`.
 
 After an import completes, the server can call OpenAI to:
 
-- suggest category assignments for newly added or unmatched words
-- surface high-confidence semantic relations between words already in the catalog
-- draft beginner-friendly and expert-oriented explanations while keeping the output grounded in stored vocabulary data
+- suggest missing category assignments across the current word catalog
+- add high-confidence semantic relations without deleting existing human-entered links
 
 If `OPENAI_API_KEY` is not configured, imports still succeed and the admin UI shows a warning that AI enrichment was skipped.
 
 ## Teacher And Study Features
 
-- Theme pages can generate classroom-ready lesson plans based on the selected category and the vocabulary entries that belong to it, then package the result as a downloadable PDF.
-- The saved words page can turn bookmarked vocabulary into a concise flashcard deck designed to stay short, memorable, and grounded in the stored word data.
+- Theme pages now include a download action that generates an AI lesson plan and saves the PDF directly to the user's device.
+- The saved words page now includes an AI flashcard generator for the learner's bookmarked words.
 - The search page can answer question-style prompts by using OpenAI with local dictionary entries as grounding context.
 
 ## Seed Reset Notes
@@ -295,3 +296,5 @@ If `OPENAI_API_KEY` is not configured, imports still succeed and the admin UI sh
 Running `npm run db:seed` now clears existing vocabulary content and recreates the default theme categories without adding any word entries.
 
 Use the admin editor or import tools to load real vocabulary after the reset.
+
+
