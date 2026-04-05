@@ -1,7 +1,14 @@
 # Vocabulary Explorer
 
-CCID: omelchuk, mkkim1, tmyang, jingtao3, alu9,  mahughes
+## Team Members(Name & CCID): 
+* **Logan Omelchuk** (omelchuk)
+* **Min Kim** (mkkim1)
+* **Tony Yang** (tmyang)
+* **Jingtao Zhang** (jingtao3)
+* **Ao Lu** (alu9)
+* **Michael Hughes** (mahughes)
 
+## Introduction
 Vocabulary Explorer is a mobile-first MVP prototype for the University of Alberta Language Technology Lab (ALTLab). It helps Plains Cree learners explore vocabulary by theme, meaning, and relation, while also giving expert users access to richer grammatical and morphological detail.
 
 The project is built with:
