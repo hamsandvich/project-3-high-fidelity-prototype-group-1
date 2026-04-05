@@ -88,6 +88,16 @@ The app uses Next.js App Router for both public pages and admin pages. Public pa
 
 The admin area is also built inside the App Router. CRUD and import actions submit to route handlers under `app/api/admin/*`, which validate payloads with Zod and persist data through shared Prisma service functions. Categories, meanings, morphology tables, and relations are normalized so real ALTLab lexical data can be added or imported without rewriting the UI.
 
+## How AI Is Used in the Prototype
+
+AI is used as a grounded support layer rather than as an unrestricted chatbot. The prototype relies on structured prompts and schema-constrained outputs so generated content stays tied to the vocabulary data already stored in the system. This keeps AI output reviewable, consistent, and aligned with the prototype's learning goals. See the attached screenshots in the project submission for examples of these flows.
+
+## Resources Consulted
+
+- OpenAI Codex with GPT-5.4 for development support and implementation assistance
+- GPT-5.3 Codex for coding support during prototype development
+- ITWÊWINA ([itwewina.altlab.app](https://itwewina.altlab.app/)) as the source used to gather the words stored in the database
+
 ## Prisma Schema
 
 The schema lives in `prisma/schema.prisma`.
@@ -268,15 +278,16 @@ An example JSON payload is prefilled on `/admin/import`.
 
 After an import completes, the server can call OpenAI to:
 
-- suggest missing category assignments across the current word catalog
-- add high-confidence semantic relations without deleting existing human-entered links
+- suggest category assignments for newly added or unmatched words
+- surface high-confidence semantic relations between words already in the catalog
+- draft beginner-friendly and expert-oriented explanations while keeping the output grounded in stored vocabulary data
 
 If `OPENAI_API_KEY` is not configured, imports still succeed and the admin UI shows a warning that AI enrichment was skipped.
 
 ## Teacher And Study Features
 
-- Theme pages now include a download action that generates an AI lesson plan and saves the PDF directly to the user's device.
-- The saved words page now includes an AI flashcard generator for the learner's bookmarked words.
+- Theme pages can generate classroom-ready lesson plans based on the selected category and the vocabulary entries that belong to it, then package the result as a downloadable PDF.
+- The saved words page can turn bookmarked vocabulary into a concise flashcard deck designed to stay short, memorable, and grounded in the stored word data.
 - The search page can answer question-style prompts by using OpenAI with local dictionary entries as grounding context.
 
 ## Seed Reset Notes
